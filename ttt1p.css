@@ -1,0 +1,94 @@
+body {
+    background-color:#0088B2;
+}
+
+h1 {
+    text-align:center;
+    font-family: 'Merienda', cursive;
+    font-size:64px;
+    color:#00C3FF;
+}
+
+#radio{
+    margin-left:auto;
+    margin-right:auto;
+    margin-bottom:60px;
+    text-align:center;
+    width:400px;
+}
+
+#scoreboard {
+    color:#1E294C;
+    text-align:center;
+    margin-top:10px;
+}
+
+#p1score {
+    margin-right:60px;
+}
+
+.table {
+    clear:both;
+    text-align:center;
+}
+
+.table > div {
+    display:inline-block;
+    vertical-align: bottom;
+    background-color:#00C3FF;
+    line-height:64px;
+    width:64px;
+    height:64px;
+    font-family:Arial, Helvetica, sans-serif;
+    font-size:48px;
+    border:1px solid black;
+    margin-right:-5px;
+    margin-bottom:-1px;
+}
+
+.table > div:hover{
+    background-color:#FF8;
+}
+
+.threeinarow{
+    color:#FF195B;
+}
+
+.table > div.x:before{
+    content:'x';
+}
+
+.table > div.o:before{
+    content:'o';
+}
+
+.clear {
+    margin-left:auto;
+    margin-right:auto;
+    margin-top:32px;
+    margin-bottom:32px;
+    width: 160px;
+    height: 36px;
+    -moz-border-radius:10px;
+    -webkit-border-radius:10px;
+    border-radius:10px;
+    background-image: -webkit-gradient(linear, 0% 0%, 0% 100%, from(#FF9933), to(#B86E25));
+    background-image: -moz-linear-gradient(0% 100% 90deg,#B86E25, #FF9933);
+    background-color: #F93;
+    text-align:center;
+    line-height:36px;
+    font-size:20px;
+    color:#004459;
+}
+
+.clear:active {
+    background-image: -webkit-gradient(linear, 0% 0%, 0% 100%, from(#B86E25), to(#FF9933));
+    background-image: -moz-linear-gradient(0% 100% 90deg,#FF9933, #B86E25);
+}
+
+p {
+    margin-right:80px;
+    margin-left:20px;
+    font-size:24px;
+    color:#1E294C;
+}
