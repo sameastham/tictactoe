@@ -117,13 +117,14 @@ function EmptyState() {
  * the phone-column max-w-md ancestor) so its safe-area math is correct on
  * mobile, then re-centered to a max-w-md inner column so it lands at the
  * bottom-right of the *reading column* rather than the physical screen edge
- * on wide desktop viewports.
+ * on wide desktop viewports. The extra 4rem of bottom padding clears the
+ * fixed `TabBar` (h-16 = 4rem) rendered underneath it in the root layout.
  */
 function FabWrapper() {
   return (
     <div
       className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom))" }}
     >
       <div className="relative w-full max-w-md">
         <Link

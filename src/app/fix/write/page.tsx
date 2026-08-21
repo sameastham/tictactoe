@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { AddContentForm } from "@/components/AddContentForm";
+import { FixComposer } from "@/components/FixComposer";
 
-export default function AddPage() {
+export default function FixWritePage() {
   return (
     <div className="min-h-dvh px-4 pb-28 pt-6">
       <header className="mb-6 flex items-center gap-3">
         <Link
-          href="/"
+          href="/fix"
           aria-label="Volver"
           className="-ml-2 flex h-11 w-11 items-center justify-center rounded-full active:bg-line/40"
         >
@@ -20,10 +20,10 @@ export default function AddPage() {
             />
           </svg>
         </Link>
-        <h1 className="text-xl font-bold tracking-tight">Agregar contenido</h1>
+        <h1 className="text-xl font-bold tracking-tight">Escribir</h1>
       </header>
 
-      <AddContentForm />
+      <FixComposer />
     </div>
   );
 }

@@ -54,6 +54,26 @@
   --color-register-panhispanic-border: #2b83b5;
   --color-register-panhispanic-fg: #185b80;
 
+  /* Fix surface's naturalness ladder (incorrect < acceptable < natural <
+     precise) — reuses the same hues as danger/amber/kept/accent so the
+     ladder reads as a continuum of the app's existing semantics rather than
+     a fifth unrelated palette. */
+  --color-rung-incorrect-bg: #fbe6e4;
+  --color-rung-incorrect-border: #c94a3d;
+  --color-rung-incorrect-fg: #8a2318;
+
+  --color-rung-acceptable-bg: #fbeecb;
+  --color-rung-acceptable-border: #c8912a;
+  --color-rung-acceptable-fg: #5b430f;
+
+  --color-rung-natural-bg: #dcf0df;
+  --color-rung-natural-border: #2f8f52;
+  --color-rung-natural-fg: #1c5c34;
+
+  --color-rung-precise-bg: #d9f2ee;
+  --color-rung-precise-border: #0e766a;
+  --color-rung-precise-fg: #0a5c53;
+
   --font-sans:
     ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
     sans-serif;
@@ -103,6 +123,22 @@
     --color-register-panhispanic-bg: #132a38;
     --color-register-panhispanic-border: #5ba9d6;
     --color-register-panhispanic-fg: #a9dcfb;
+
+    --color-rung-incorrect-bg: #3a1712;
+    --color-rung-incorrect-border: #e2685a;
+    --color-rung-incorrect-fg: #ffb3a6;
+
+    --color-rung-acceptable-bg: #3b2c10;
+    --color-rung-acceptable-border: #d9a441;
+    --color-rung-acceptable-fg: #f3d999;
+
+    --color-rung-natural-bg: #143622;
+    --color-rung-natural-border: #48b26e;
+    --color-rung-natural-fg: #93e0ac;
+
+    --color-rung-precise-bg: #163a34;
+    --color-rung-precise-border: #35c9b5;
+    --color-rung-precise-fg: #5adfcc;
   }
 }
 
