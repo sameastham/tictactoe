@@ -206,6 +206,7 @@ export type EventPayload =
   | ItemAvoidedPayload
   | AdjudicatedPayload
   | ReviewedPayload
+  | DictationMissPayload
   | Record<string, unknown>;
 
 /** A model extraction result as persisted on a content row, with provenance. */
@@ -279,3 +280,57 @@ export type DueItem = z.infer<typeof DueItemSchema>;
 
 /** A single word's timing within an audio/video transcript. */
 export type WordTimestamp = { w: string; startMs: number; endMs: number };
+
+/** One transcript segment cut for dictation practice — see `buildSegments` in `src/lib/segments.ts`. */
+export const TranscriptSegmentSchema = z.object({
+  index: z.number().int(),
+  startMs: z.number().int(),
+  endMs: z.number().int(),
+  text: z.string(),
+});
+export type TranscriptSegment = z.infer<typeof TranscriptSegmentSchema>;
+
+/**
+ * How a dictation miss was classified (Listen surface). `lexical`/`reduction`
+ * map onto the taxonomy (`listening_lexical`/`listening_reduction`);
+ * `proper_noun`/`near_miss` are tracked in the payload only — they are not
+ * acquisition gaps, see `missClassToTaxonomy` in `src/lib/dictation.ts`.
+ */
+export const DictationMissClassSchema = z.enum(["lexical", "reduction", "proper_noun", "near_miss"]);
+export type DictationMissClass = z.infer<typeof DictationMissClassSchema>;
+
+/** One miss found by diffing a dictation attempt's typed text against its segment transcript. */
+export const DictationMissSchema = z.object({
+  expected: z.string(),
+  heard: z.string().nullable(),
+  class: DictationMissClassSchema,
+});
+export type DictationMiss = z.infer<typeof DictationMissSchema>;
+
+/** Payload of a `dictation_miss` event: one miss within one dictation attempt. */
+export const DictationMissPayloadSchema = z.object({
+  contentId: z.string(),
+  segmentIndex: z.number().int(),
+  segmentText: z.string(),
+  expected: z.string(),
+  heard: z.string().nullable(),
+  missClass: DictationMissClassSchema,
+  attemptId: z.string(),
+});
+export type DictationMissPayload = z.infer<typeof DictationMissPayloadSchema>;
+
+/** Body of the "submit a dictation attempt" (POST /api/dictation) API request. */
+export const DictationAttemptBodySchema = z.object({
+  contentId: z.string(),
+  segmentIndex: z.number().int().min(0),
+  typed: z.string(),
+});
+export type DictationAttemptBody = z.infer<typeof DictationAttemptBodySchema>;
+
+/** Body of the "capture an item from a dictation miss" (POST /api/dictation/capture) API request. */
+export const CaptureMissBodySchema = z.object({
+  contentId: z.string(),
+  segmentIndex: z.number().int().min(0),
+  chunk: z.string(),
+});
+export type CaptureMissBody = z.infer<typeof CaptureMissBodySchema>;

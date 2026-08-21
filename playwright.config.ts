@@ -3,10 +3,11 @@ import { defineConfig, devices } from "@playwright/test";
 /**
  * E2E config for the Read flow. Runs against a production `next start`
  * server (started fresh per invocation) on a throwaway sqlite DB
- * (.tmp/e2e.db) seeded by `./e2e/global-setup.ts`, with MODEL_PROVIDER
- * forced to the deterministic fixture provider — no network calls, no API
- * key needed. Single worker: all tests share one DB, so they must run
- * serially, never in parallel.
+ * (.tmp/e2e.db) seeded by `./e2e/global-setup.ts`, with MODEL_PROVIDER and
+ * STT_PROVIDER forced to their deterministic fixture implementations — no
+ * network calls, no API key, no python/faster-whisper env needed. Single
+ * worker: all tests share one DB, so they must run serially, never in
+ * parallel.
  */
 export default defineConfig({
   testDir: "./e2e",
@@ -33,6 +34,7 @@ export default defineConfig({
     env: {
       DB_PATH: ".tmp/e2e.db",
       MODEL_PROVIDER: "fixture",
+      STT_PROVIDER: "fixture",
     },
   },
 });

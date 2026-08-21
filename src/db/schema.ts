@@ -9,13 +9,15 @@ export const content = sqliteTable(
   {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
-    source: text("source", { enum: ["url", "paste"] }).notNull(),
+    source: text("source", { enum: ["url", "paste", "upload"] }).notNull(),
     sourceUrl: text("source_url"),
     type: text("type", { enum: ["article", "paste", "audio", "video"] }).notNull(),
     title: text("title"),
     text: text("text").notNull(),
     transcript: text("transcript"),
     wordTimestamps: text("word_timestamps", { mode: "json" }).$type<WordTimestamp[]>(),
+    /** Repo-relative path under data/media/ to an uploaded audio file (Listen surface). Null for text content. */
+    mediaPath: text("media_path"),
     difficulty: text("difficulty", { enum: CEFR_LEVELS }),
     extraction: text("extraction", { mode: "json" }).$type<StoredExtraction>(),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),

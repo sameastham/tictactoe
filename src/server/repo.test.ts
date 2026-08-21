@@ -5,6 +5,7 @@ import {
   AlreadyDecidedError,
   SentenceIndexOutOfRangeError,
   WritingNotJudgedError,
+  captureFromMiss,
   createContent,
   createSession,
   createWriting,
@@ -17,12 +18,14 @@ import {
   listRecentItems,
   recordAdjudication,
   recordDecision,
+  recordDictationAttempt,
   recordJudgmentEvents,
   saveExtraction,
   saveJudgment,
+  saveTranscript,
 } from "@/server/repo";
 import { content, events, goldSet, items, writings } from "@/db/schema";
-import type { Candidate, JudgeResult, JudgeTargetItem, StoredExtraction } from "@/lib/contracts";
+import type { Candidate, DictationMiss, JudgeResult, JudgeTargetItem, StoredExtraction } from "@/lib/contracts";
 
 function makeCandidate(overrides: Partial<Candidate> = {}): Candidate {
   return {
@@ -567,5 +570,138 @@ describe("migration 0001 (writings table, item_avoided event type)", () => {
 describe("createTestDb isolation", () => {
   it("starts with no content rows", () => {
     expect(db.select().from(content).all()).toHaveLength(0);
+  });
+});
+
+// -----------------------------------------------------------------------------
+// Listen surface: media upload content, transcript, dictation attempts, capture
+// -----------------------------------------------------------------------------
+
+describe("createContent — upload source + mediaPath", () => {
+  it("accepts source 'upload' and persists mediaPath", () => {
+    const row = createContent(db, {
+      source: "upload",
+      type: "audio",
+      title: "En el tianguis",
+      text: "",
+      mediaPath: "data/media/abc123.wav",
+    });
+    expect(row.source).toBe("upload");
+    expect(row.type).toBe("audio");
+    expect(row.mediaPath).toBe("data/media/abc123.wav");
+    expect(row.text).toBe("");
+  });
+
+  it("defaults mediaPath to null when omitted", () => {
+    const row = createContent(db, { source: "paste", type: "paste", text: "Texto de prueba suficientemente largo." });
+    expect(row.mediaPath).toBeNull();
+  });
+});
+
+describe("saveTranscript", () => {
+  it("persists transcript + wordTimestamps and mirrors transcript onto text", () => {
+    const row = createContent(db, { source: "upload", type: "audio", title: "Audio", text: "", mediaPath: "data/media/x.wav" });
+    saveTranscript(db, row.id, {
+      transcript: "Hola cómo estás.",
+      wordTimestamps: [
+        { w: "Hola", startMs: 0, endMs: 300 },
+        { w: "cómo", startMs: 340, endMs: 600 },
+        { w: "estás.", startMs: 640, endMs: 1000 },
+      ],
+    });
+    const updated = getContent(db, row.id)!;
+    expect(updated.transcript).toBe("Hola cómo estás.");
+    expect(updated.text).toBe("Hola cómo estás.");
+    expect(updated.wordTimestamps).toHaveLength(3);
+  });
+});
+
+function makeMiss(overrides: Partial<DictationMiss> = {}): DictationMiss {
+  return { expected: "aguacates", heard: null, class: "lexical", ...overrides };
+}
+
+describe("recordDictationAttempt", () => {
+  it("writes one dictation_miss event per miss, with taxonomy mapped from the miss class", () => {
+    const c = createContent(db, { source: "upload", type: "audio", text: "", mediaPath: "data/media/x.wav" });
+    const misses: DictationMiss[] = [
+      makeMiss({ expected: "aguacates", heard: null, class: "lexical" }),
+      makeMiss({ expected: "de", heard: null, class: "reduction" }),
+    ];
+
+    const { eventIds } = recordDictationAttempt(db, {
+      contentId: c.id,
+      segmentIndex: 0,
+      segmentText: "Compré unos aguacates de la señora.",
+      misses,
+      attemptId: "attempt_1",
+    });
+
+    expect(eventIds).toHaveLength(2);
+    const rows = db.select().from(events).where(eq(events.type, "dictation_miss")).all();
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.surface === "listen")).toBe(true);
+    expect(rows.every((r) => r.contentId === c.id)).toBe(true);
+
+    const taxonomies = rows.map((r) => r.taxonomy).sort();
+    expect(taxonomies).toEqual(["listening_lexical", "listening_reduction"]);
+  });
+
+  it("a proper_noun/near_miss class maps to null taxonomy but still writes an event", () => {
+    const c = createContent(db, { source: "upload", type: "audio", text: "", mediaPath: "data/media/x.wav" });
+    recordDictationAttempt(db, {
+      contentId: c.id,
+      segmentIndex: 0,
+      segmentText: "Fui a Coyoacán ayer.",
+      misses: [makeMiss({ expected: "Coyoacán", heard: null, class: "proper_noun" })],
+      attemptId: "attempt_2",
+    });
+
+    const rows = db.select().from(events).where(eq(events.type, "dictation_miss")).all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].taxonomy).toBeNull();
+  });
+
+  it("a perfect attempt (zero misses) writes no events at all", () => {
+    const c = createContent(db, { source: "upload", type: "audio", text: "", mediaPath: "data/media/x.wav" });
+    const { eventIds } = recordDictationAttempt(db, {
+      contentId: c.id,
+      segmentIndex: 0,
+      segmentText: "Todo perfecto.",
+      misses: [],
+      attemptId: "attempt_3",
+    });
+
+    expect(eventIds).toHaveLength(0);
+    expect(db.select().from(events).all()).toHaveLength(0);
+  });
+});
+
+describe("captureFromMiss", () => {
+  it("creates an item row and a captured event, both attributed to the origin content", () => {
+    const c = createContent(db, { source: "upload", type: "audio", text: "", mediaPath: "data/media/x.wav" });
+
+    const { itemId } = captureFromMiss(db, {
+      contentId: c.id,
+      segmentIndex: 1,
+      chunk: "aguacates",
+      segmentText: "Al final me traje unos aguacates enormes.",
+    });
+
+    const itemRow = db.select().from(items).where(eq(items.id, itemId)).get()!;
+    expect(itemRow.chunk).toBe("aguacates");
+    expect(itemRow.register).toBe("neutral");
+    expect(itemRow.originContentId).toBe(c.id);
+    expect(itemRow.originSentence).toBe("Al final me traje unos aguacates enormes.");
+    expect(itemRow.taxonomy).toEqual(["listening_lexical"]);
+    expect(itemRow.why).toMatch(/dictado/);
+
+    const eventRows = db.select().from(events).where(eq(events.type, "captured")).all();
+    expect(eventRows).toHaveLength(1);
+    expect(eventRows[0].surface).toBe("listen");
+    expect(eventRows[0].itemId).toBe(itemId);
+    const payload = eventRows[0].payload as { candidateId: string; candidate: Candidate; promptVersion: string };
+    expect(payload.candidateId).toBe(`listen-${itemId}`);
+    expect(payload.candidate.chunk).toBe("aguacates");
+    expect(payload.promptVersion).toBe("n/a");
   });
 });

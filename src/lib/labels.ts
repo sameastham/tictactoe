@@ -40,9 +40,10 @@ export const TAXONOMY_LABELS: Record<TaxonomyTag, string> = {
   listening_lexical: "Léxico auditivo",
 };
 
-export const SOURCE_LABELS: Record<"url" | "paste", string> = {
+export const SOURCE_LABELS: Record<"url" | "paste" | "upload", string> = {
   url: "URL",
   paste: "Pegado",
+  upload: "Audio",
 };
 
 /** Spanish labels for the Fix surface's naturalness ladder (`RUNGS`), low to high. */

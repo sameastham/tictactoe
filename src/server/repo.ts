@@ -2,10 +2,13 @@ import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "@/db";
 import { content, events, goldSet, items, modelCalls, sessions, writings } from "@/db/schema";
 import { DEFAULT_USER_ID, newId } from "@/lib/ids";
+import { missClassToTaxonomy } from "@/lib/dictation";
 import type {
   AdjudicatedPayload,
   Candidate,
   CapturedPayload,
+  DictationMiss,
+  DictationMissPayload,
   DiscardedPayload,
   ItemAvoidedPayload,
   JudgeResult,
@@ -15,6 +18,7 @@ import type {
   ReviewedPayload,
   ReviewRating,
   StoredExtraction,
+  WordTimestamp,
 } from "@/lib/contracts";
 import type { Rung, Surface } from "@/lib/taxonomy";
 
@@ -54,11 +58,13 @@ export type GoldSetRow = typeof goldSet.$inferSelect;
 // -----------------------------------------------------------------------------
 
 export type CreateContentInput = {
-  source: "url" | "paste";
+  source: "url" | "paste" | "upload";
   sourceUrl?: string | null;
   type: "article" | "paste" | "audio" | "video";
   title?: string | null;
   text: string;
+  /** Repo-relative path under data/media/ (Listen surface uploads). */
+  mediaPath?: string | null;
 };
 
 /** Inserts a new piece of content and returns the persisted row. */
@@ -71,10 +77,29 @@ export function createContent(db: Db, data: CreateContentInput): ContentRow {
     type: data.type,
     title: data.title ?? null,
     text: data.text,
+    mediaPath: data.mediaPath ?? null,
     createdAt: new Date(),
   };
   db.insert(content).values(row).run();
   return getContent(db, row.id)!;
+}
+
+/**
+ * Persists a completed transcription onto a content row: `transcript`,
+ * `wordTimestamps`, and `text` (set to the transcript, so any Read-side code
+ * that reads `.text` keeps working for audio content too). Like
+ * `saveExtraction`, this is a plain update — `content` isn't part of the
+ * append-only event log.
+ */
+export function saveTranscript(
+  db: Db,
+  contentId: string,
+  data: { transcript: string; wordTimestamps: WordTimestamp[] },
+): void {
+  db.update(content)
+    .set({ transcript: data.transcript, wordTimestamps: data.wordTimestamps, text: data.transcript })
+    .where(eq(content.id, contentId))
+    .run();
 }
 
 /** Fetches a single content row by id, or undefined if it doesn't exist. */
@@ -545,6 +570,130 @@ export function recordReview(db: Db, input: RecordReviewInput): { eventId: strin
     })
     .run();
   return { eventId };
+}
+
+// -----------------------------------------------------------------------------
+// dictation (Listen surface)
+// -----------------------------------------------------------------------------
+
+export type RecordDictationAttemptInput = {
+  contentId: string;
+  segmentIndex: number;
+  segmentText: string;
+  misses: DictationMiss[];
+  attemptId: string;
+};
+
+/**
+ * Records the event-log consequences of one dictation attempt, in a single
+ * transaction: one `dictation_miss` event per miss (surface "listen",
+ * `taxonomy` per `missClassToTaxonomy`). A perfect attempt (zero misses)
+ * writes nothing — the log records misses, not successes, per plan Sec.4.1.
+ */
+export function recordDictationAttempt(db: Db, input: RecordDictationAttemptInput): { eventIds: string[] } {
+  const { contentId, segmentIndex, segmentText, misses, attemptId } = input;
+  if (misses.length === 0) return { eventIds: [] };
+
+  return db.transaction((tx) => {
+    const now = new Date();
+    const eventIds: string[] = [];
+
+    for (const miss of misses) {
+      const payload: DictationMissPayload = {
+        contentId,
+        segmentIndex,
+        segmentText,
+        expected: miss.expected,
+        heard: miss.heard,
+        missClass: miss.class,
+        attemptId,
+      };
+      const eventId = newId();
+      tx.insert(events)
+        .values({
+          id: eventId,
+          userId: DEFAULT_USER_ID,
+          type: "dictation_miss",
+          surface: "listen",
+          taxonomy: missClassToTaxonomy(miss.class),
+          contentId,
+          payload,
+          createdAt: now,
+        })
+        .run();
+      eventIds.push(eventId);
+    }
+
+    return { eventIds };
+  });
+}
+
+export type CaptureFromMissInput = {
+  contentId: string;
+  segmentIndex: number;
+  chunk: string;
+  segmentText: string;
+};
+
+const CAPTURE_FROM_MISS_WHY = "Capturada desde una pérdida de dictado";
+
+/**
+ * Records the learner choosing to capture an item straight out of a
+ * dictation miss, in a single transaction: an items row (register
+ * "neutral", `originSentence` = the segment's transcript text, taxonomy
+ * `["listening_lexical"]`) plus a `captured` event (surface "listen") whose
+ * payload is a candidate-shaped object built from those same fields — this
+ * mirrors `recordDecision`'s "keep" path for the Read surface, but there is
+ * no model-extracted `Candidate` to point back to, so one is synthesized
+ * here with `promptVersion: "n/a"`.
+ */
+export function captureFromMiss(db: Db, input: CaptureFromMissInput): { itemId: string } {
+  const { contentId, chunk, segmentText } = input;
+
+  return db.transaction((tx) => {
+    const now = new Date();
+    const itemId = newId();
+
+    tx.insert(items)
+      .values({
+        id: itemId,
+        userId: DEFAULT_USER_ID,
+        chunk,
+        register: "neutral",
+        contrastSet: null,
+        originContentId: contentId,
+        originSentence: segmentText,
+        why: CAPTURE_FROM_MISS_WHY,
+        taxonomy: ["listening_lexical"],
+        createdAt: now,
+      })
+      .run();
+
+    const candidate: Candidate = {
+      id: `listen-${itemId}`,
+      chunk,
+      origin_sentence: segmentText,
+      register: "neutral",
+      why: CAPTURE_FROM_MISS_WHY,
+      contrast_set: null,
+      taxonomy: ["listening_lexical"],
+    };
+    const payload: CapturedPayload = { candidateId: candidate.id, candidate, promptVersion: "n/a" };
+    tx.insert(events)
+      .values({
+        id: newId(),
+        userId: DEFAULT_USER_ID,
+        type: "captured",
+        surface: "listen",
+        itemId,
+        contentId,
+        payload,
+        createdAt: now,
+      })
+      .run();
+
+    return { itemId };
+  });
 }
 
 // -----------------------------------------------------------------------------
