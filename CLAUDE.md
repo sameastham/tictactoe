@@ -111,6 +111,10 @@ passed to every model call via `renderPrompt`, which substitutes `{{LEARNER_BLOC
 
 - Default provider: `anthropic`, model `claude-opus-5` (`DEFAULT_MODEL` in
   `src/server/language/providers/anthropic.ts`), overridable with `MODEL_ID`.
+- **The deployment target is a 2019 Intel MacBook Pro (64 GB RAM, no Apple Silicon).** No local
+  LLM is viable there — hosted models are the only `extract`/`judge`/`converse` path. When the
+  Listen surface is built, do NOT reach for `mlx-whisper` (Apple Silicon only): use
+  `faster-whisper` (CTranslate2, CPU int8) or a hosted STT API for transcription.
 - `fixture` provider (`FixtureProvider`) is deterministic and network-free, for tests/offline dev;
   it only implements `purpose: "extract"` and throws for `judge`/`converse`.
 - Both live behind the `ModelProvider` interface (`provider.ts`) — `completeJson<T>` in,
