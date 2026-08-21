@@ -61,8 +61,8 @@ async function readCappedBuffer(response: Response, capBytes: number): Promise<B
 }
 
 /** Runs a PDF buffer through {@link extractPdfText}, applying the same {@link MIN_ARTICLE_LENGTH} floor the HTML path uses. */
-async function extractPdfArticle(buf: Buffer): Promise<{ title: string | null; text: string }> {
-  let extracted: { title: string | null; text: string };
+async function extractPdfArticle(buf: Buffer): Promise<{ title: string | null; text: string; truncated: boolean }> {
+  let extracted: Awaited<ReturnType<typeof extractPdfText>>;
   try {
     extracted = await extractPdfText(buf);
   } catch (error) {
@@ -76,15 +76,18 @@ async function extractPdfArticle(buf: Buffer): Promise<{ title: string | null; t
     throw new ArticleFetchError("could not extract a readable article from this URL", 422);
   }
 
-  return extracted;
+  return { title: extracted.title, text: extracted.text, truncated: extracted.truncated };
 }
 
 /**
  * Fetches a URL, extracts its main article content via Readability, and
  * returns the cleaned title/text. Throws {@link ArticleFetchError} for any
  * failure, with a `status` telling the API route what to respond with.
+ * `truncated` is `true` only for a PDF URL whose OCR fallback
+ * ({@link extractPdfText}) hit the {@link import("@/server/pdf").PDF_OCR_MAX_PAGES}
+ * cap — always `false` for the HTML path.
  */
-export async function fetchArticle(url: string): Promise<{ title: string | null; text: string }> {
+export async function fetchArticle(url: string): Promise<{ title: string | null; text: string; truncated: boolean }> {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -131,7 +134,7 @@ export async function fetchArticle(url: string): Promise<{ title: string | null;
       throw new ArticleFetchError("could not extract a readable article from this URL", 422);
     }
 
-    return { title: article.title ?? null, text: cleanText(textContent) };
+    return { title: article.title ?? null, text: cleanText(textContent), truncated: false };
   }
 
   // Content-type didn't say PDF, but some servers mislabel PDFs (e.g.

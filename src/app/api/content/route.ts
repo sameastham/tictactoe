@@ -9,6 +9,9 @@ import { createContent, listContent, type ContentListItem, type ContentRow } fro
 const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 50;
 
+/** Shown when a PDF's OCR fallback (src/server/pdf.ts) hit PDF_OCR_MAX_PAGES and only processed the first N pages. */
+const TRUNCATED_OCR_NOTE = "Se procesaron las primeras 20 páginas.";
+
 /** Narrow DTO returned for a freshly created content row. */
 function toSummaryDto(row: ContentRow) {
   return {
@@ -36,10 +39,11 @@ function parseLimit(searchParams: URLSearchParams): number {
 /**
  * Handles the multipart branch of `POST /api/content`: uploads a PDF for the
  * Read surface, extracting its text via `extractPdfText`/`cleanPdfText`
- * (src/server/pdf.ts) and creating a `content` row (source "upload", type
- * "article") — same shape and status as the URL/paste branches below, just a
- * different way of getting text onto a content row. Mirrors
- * POST /api/media's `handleUpload` multipart idiom.
+ * (src/server/pdf.ts — falls back to OCR for scanned/image-only PDFs) and
+ * creating a `content` row (source "upload", type "article") — same shape
+ * and status as the URL/paste branches below, just a different way of
+ * getting text onto a content row. Mirrors POST /api/media's `handleUpload`
+ * multipart idiom.
  */
 async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
   let formData: FormData;
@@ -65,7 +69,7 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
 
   const buf = Buffer.from(await file.arrayBuffer());
 
-  let extracted: { title: string | null; text: string };
+  let extracted: Awaited<ReturnType<typeof extractPdfText>>;
   try {
     extracted = await extractPdfText(buf);
   } catch (error) {
@@ -90,7 +94,10 @@ async function handlePdfUpload(request: NextRequest): Promise<NextResponse> {
     text: extracted.text,
   });
 
-  return NextResponse.json({ content: toSummaryDto(created) }, { status: 201 });
+  return NextResponse.json(
+    { content: toSummaryDto(created), ...(extracted.truncated ? { note: TRUNCATED_OCR_NOTE } : {}) },
+    { status: 201 },
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -108,9 +115,11 @@ export async function POST(request: NextRequest) {
     const db = getDb();
 
     let created: ContentRow;
+    let truncated = false;
     if ("url" in body) {
-      const { title, text } = await fetchArticle(body.url);
+      const { title, text, truncated: urlTruncated } = await fetchArticle(body.url);
       created = createContent(db, { source: "url", sourceUrl: body.url, type: "article", title, text });
+      truncated = urlTruncated;
     } else {
       created = createContent(db, {
         source: "paste",
@@ -120,7 +129,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ content: toSummaryDto(created) }, { status: 201 });
+    return NextResponse.json(
+      { content: toSummaryDto(created), ...(truncated ? { note: TRUNCATED_OCR_NOTE } : {}) },
+      { status: 201 },
+    );
   } catch (error) {
     if (error instanceof ArticleFetchError) {
       return NextResponse.json({ error: error.message }, { status: error.status });

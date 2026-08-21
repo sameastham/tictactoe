@@ -12,7 +12,11 @@ async function readErrorMessage(res: Response, mode: Mode): Promise<string> {
 
   if (res.status === 422) {
     if (mode === "pdf") {
-      return "Ese PDF no tiene texto extraíble — puede ser un escaneo.";
+      const message = typeof error === "string" && error.length > 0 ? error : null;
+      // extractPdfText already attempts OCR before giving up (src/server/pdf.ts)
+      // — its own message says so ("...ni siquiera con OCR"). Fall back to a
+      // generic phrasing only when the server didn't send one.
+      return message ?? "Ese PDF no tiene texto extraíble, ni siquiera con reconocimiento óptico (OCR).";
     }
     return "No se pudo extraer un artículo legible de esa URL.";
   }
@@ -37,11 +41,13 @@ export function AddContentForm() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (pending) return;
     setError(null);
+    setNote(null);
 
     if (mode === "texto" && text.trim().length < 40) {
       setError("El texto debe tener al menos 40 caracteres.");
@@ -77,7 +83,14 @@ export function AddContentForm() {
         setPending(false);
         return;
       }
-      const data = (await res.json()) as { content: { id: string } };
+      const data = (await res.json()) as { content: { id: string }; note?: string };
+      if (data.note) {
+        // Cheapest-honest truncation UX (src/server/pdf.ts's OCR PDF_OCR_MAX_PAGES
+        // cap): show the note briefly before navigating away, rather than
+        // silently dropping it or plumbing a one-off banner into the reader.
+        setNote(data.note);
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
       router.push(`/read/${data.content.id}`);
     } catch {
       setError("No se pudo conectar con el servidor. Intenta de nuevo.");
@@ -182,7 +195,10 @@ export function AddContentForm() {
               onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
               className="rounded-xl border border-line bg-paper-elevated px-4 py-3 text-base text-ink outline-none file:mr-3 file:rounded-full file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-accent-fg focus:border-accent focus:ring-2 focus:ring-accent/25"
             />
-            <p className="text-xs text-ink-muted">Se extraerá el texto del PDF.</p>
+            <p className="text-xs text-ink-muted">
+              Se extraerá el texto del PDF. Si es un escaneo (sin texto ya incrustado), se usará
+              reconocimiento óptico (OCR) — tarda más, hasta un par de minutos.
+            </p>
           </div>
         </div>
       )}
@@ -190,6 +206,12 @@ export function AddContentForm() {
       {error && (
         <div className="rounded-xl border border-danger-border bg-danger-bg px-4 py-3 text-sm text-danger-fg">
           {error}
+        </div>
+      )}
+
+      {note && (
+        <div className="rounded-xl border border-line bg-paper-elevated px-4 py-3 text-sm text-ink-muted">
+          {note}
         </div>
       )}
 
@@ -201,7 +223,11 @@ export function AddContentForm() {
         {pending && (
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-accent-fg/40 border-t-accent-fg" />
         )}
-        {pending ? (mode === "pdf" ? "Extrayendo texto…" : "Agregando…") : "Agregar contenido"}
+        {pending
+          ? mode === "pdf"
+            ? "Extrayendo texto… (los escaneos tardan más, hasta un par de minutos)"
+            : "Agregando…"
+          : "Agregar contenido"}
       </button>
     </form>
   );
