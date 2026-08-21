@@ -4,6 +4,7 @@
  */
 import type { Register, Rung } from "@/lib/taxonomy";
 import type { TaxonomyTag } from "@/lib/taxonomy";
+import type { DictationMissClass } from "@/lib/contracts";
 
 export const REGISTER_LABELS: Record<Register, string> = {
   neutral: "Neutro",
@@ -83,4 +84,16 @@ export const RUNG_EDGE_CLASSES: Record<Rung, string> = {
 export const SEVERITY_LABELS: Record<"minor" | "major", string> = {
   minor: "leve",
   major: "grave",
+};
+
+/**
+ * Spanish labels for a dictation miss's classification (Listen surface),
+ * shown on the grouped miss chips below a diff — see `classifyMiss` in
+ * `src/lib/dictation.ts` for how a miss earns each class.
+ */
+export const MISS_CLASS_LABELS: Record<DictationMissClass, string> = {
+  lexical: "Palabra nueva",
+  reduction: "Reducción",
+  proper_noun: "Nombre propio",
+  near_miss: "Casi",
 };
