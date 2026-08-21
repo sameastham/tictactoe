@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Español Coach</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --paper: #faf6ef;
+        --paper-elevated: #ffffff;
+        --ink: #2a2018;
+        --ink-muted: #7a6c5c;
+        --line: #e6dac9;
+        --accent: #0e766a;
+        --accent-fg: #ffffff;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #1a130c;
+          --paper-elevated: #241a10;
+          --ink: #f2e9da;
+          --ink-muted: #ab9c88;
+          --line: #3a2c1c;
+          --accent: #35c9b5;
+          --accent-fg: #08211d;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+      }
+
+      body {
+        background: var(--paper);
+        color: var(--ink);
+        font-family:
+          ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+          sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100dvh;
+        padding: 24px;
+        padding-top: max(24px, env(safe-area-inset-top));
+        padding-bottom: max(24px, env(safe-area-inset-bottom));
+        padding-left: max(24px, env(safe-area-inset-left));
+        padding-right: max(24px, env(safe-area-inset-right));
+        -webkit-tap-highlight-color: transparent;
+      }
+
+      .card {
+        width: 100%;
+        max-width: 26rem;
+        background: var(--paper-elevated);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 32px 28px;
+        text-align: center;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+      }
+
+      .mark {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 18px;
+        border-radius: 16px;
+        background: var(--accent);
+        color: var(--accent-fg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 34px;
+        font-weight: 700;
+        line-height: 1;
+      }
+
+      h1 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin: 0 0 4px;
+      }
+
+      .status {
+        font-size: 0.95rem;
+        color: var(--ink);
+        margin: 0 0 20px;
+      }
+
+      .hints {
+        text-align: left;
+        margin: 0 0 24px;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: var(--paper);
+        list-style: none;
+      }
+
+      .hints li {
+        display: flex;
+        gap: 8px;
+        font-size: 0.9rem;
+        color: var(--ink-muted);
+        padding: 5px 0;
+      }
+
+      .hints li::before {
+        content: "•";
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      button {
+        appearance: none;
+        border: 0;
+        width: 100%;
+        padding: 13px 20px;
+        border-radius: 12px;
+        background: var(--accent);
+        color: var(--accent-fg);
+        font-size: 1rem;
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+      }
+
+      button:active {
+        opacity: 0.85;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="mark" aria-hidden="true">Ñ</div>
+      <h1>Español Coach</h1>
+      <p class="status">No se pudo conectar al servidor.</p>
+      <ul class="hints">
+        <li>¿Está encendida la MacBook?</li>
+        <li>¿Estás conectado a Tailscale?</li>
+      </ul>
+      <button type="button" onclick="location.reload()">Reintentar</button>
+    </main>
+  </body>
+</html>

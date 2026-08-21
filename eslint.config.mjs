@@ -10,6 +10,9 @@ const eslintConfig = [
       "drizzle/**",
       "data/**",
       ".tmp/**",
+      // Generated native Android project (Gradle/Capacitor build output,
+      // bundled web-runtime JS) — not app source, never hand-edited.
+      "android/**",
     ],
   },
 ];
