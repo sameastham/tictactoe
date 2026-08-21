@@ -15,12 +15,10 @@ Listen (audio upload → dictation, `src/lib/dictation.ts` + `src/server/stt/`),
 post-session `judge`, `src/server/talk.ts`) — plus the FSRS review scheduler
 (`src/server/scheduler.ts`, `ts-fsrs`), the weekly report (`/report`, `src/server/report.ts`), and
 the eval harness + gold-set builders over `gold_set`/`eval_runs` (`src/server/goldset/`,
-`scripts/goldset.ts`, `scripts/eval.ts`). Not yet built: ingesting content from a URL that isn't a
-readable article (e.g. yt-dlp caption ingestion for video/podcast sources — Listen currently only
-takes an uploaded audio file), a voice mode for Talk (text-only today), further Listen stages
-beyond dictation (recognition/production follow-ups), and a learner mastery model beyond FSRS
-due/priority (`weak_categories`/`due_items` are frequency- and recency-derived, not a real per-item
-mastery score). Don't assume any of these exist.
+`scripts/goldset.ts`, `scripts/eval.ts`). Not yet built: pronunciation/shadowing practice, content
+recommendations, difficulty scoring beyond the single CEFR label already on each content row, and
+the product-gate items the plan defers past a single-user tool — auth/multi-user support and a
+hosted deployment. Don't assume any of these exist.
 
 ## 2. Commands
 
@@ -39,8 +37,11 @@ mastery score). Don't assume any of these exist.
 - `npm run seed` — `tsx scripts/seed.ts`: applies migrations, then idempotently inserts the
   fixture article, fixture dictation audio, and a small gold-source notes content row.
 - `npm run goldset` — `tsx scripts/goldset.ts`: idempotently derives `natural_control` and
-  `seeded_error` `gold_set` rows from every content row's text (see `src/server/goldset/`). Run
-  after `npm run seed`.
+  `seeded_error` `gold_set` rows from every content row's text (see `src/server/goldset/`).
+  Rule-based catalogue injection (`src/server/goldset/catalogue.ts`) is the default for
+  `seeded_error`; `npm run goldset -- --model` switches it to model-based injection instead
+  (`LanguageService.seedError`, the `seed_error` purpose), with `verifySingleChange` rule-checking
+  every model mutation before it's inserted. Run after `npm run seed`.
 - `npm run eval` — `tsx scripts/eval.ts`: runs `judge` over every `gold_set` row, prints a
   false-flag/catch-rate/tag-accuracy/adjudicated-agreement table, and inserts one `eval_runs` row.
   Run after `npm run goldset`.
@@ -53,9 +54,11 @@ to hit the real API.
 ## 3. Hard rules
 
 - **No model calls outside `src/server/language/`.** `LanguageService` (`service.ts`) is the only
-  gateway; there are exactly three prompt purposes: `extract`, `judge`, `converse` — all three are
-  implemented (`judge.v1`, `converse.v1`, alongside `extract.v1`). Every provider call — success or
-  failure — must produce one `model_calls` row via `logModelCall`.
+  gateway; there are exactly four prompt purposes: `extract`, `judge`, `converse`, `seed_error` —
+  all four are implemented (`judge.v1`, `converse.v1`, `seed_error.v1`, alongside `extract.v1`).
+  `seed_error` is gold-set tooling only (`src/server/goldset/build.ts`'s model mode) — no
+  user-facing surface ever calls it. Every provider call — success or failure — must produce one
+  `model_calls` row via `logModelCall`.
 - **`events` is append-only.** Never `UPDATE` or `DELETE` a row in `events`; a correction is a new
   event, not an edit. `src/server/repo.ts` deliberately exposes no event-mutation function — keep
   it that way. Decisions (keep/discard) are derived by replaying `captured`/`discarded` events
@@ -115,10 +118,11 @@ improvement.
 Prompts live in `prompts/` as `name.vN.md` (e.g. `prompts/extract.v1.md`); the filename **is**
 the version, loaded by `loadPrompt(name, version)` in `src/server/language/prompts.ts`. Any
 semantic edit to a prompt is a new file with a bumped version — never an in-place rewrite of an
-existing `.md`. All three purposes are on `v1` today (`EXTRACT_PROMPT_VERSION`,
-`JUDGE_PROMPT_VERSION`, `CONVERSE_PROMPT_VERSION` in `prompts.ts`); each is recorded on every
-`model_calls` row, and `extract`'s/`judge`'s are additionally persisted on `content.extraction` /
-`writings.promptVersion` — preserve this provenance trail on any future version bump.
+existing `.md`. All four purposes are on `v1` today (`EXTRACT_PROMPT_VERSION`,
+`JUDGE_PROMPT_VERSION`, `CONVERSE_PROMPT_VERSION`, `SEED_ERROR_PROMPT_VERSION` in `prompts.ts`);
+each is recorded on every `model_calls` row, and `extract`'s/`judge`'s are additionally persisted
+on `content.extraction` / `writings.promptVersion` — preserve this provenance trail on any future
+version bump.
 
 `buildLearnerBlock(db)` (`src/server/learner.ts`) assembles the learner profile — static
 `level`/`goal` from `config/learner.json`, `weak_categories` derived from the last-30-days
@@ -133,13 +137,14 @@ from `getDueItems(db, 5)` — and is passed to every model call via `renderPromp
 - Default provider: `anthropic`, model `claude-opus-5` (`DEFAULT_MODEL` in
   `src/server/language/providers/anthropic.ts`), overridable with `MODEL_ID`.
 - **The deployment target is a 2019 Intel MacBook Pro (64 GB RAM, no Apple Silicon).** No local
-  LLM is viable there — hosted models are the only `extract`/`judge`/`converse` path. When the
-  Listen surface is built, do NOT reach for `mlx-whisper` (Apple Silicon only): use
+  LLM is viable there — hosted models are the only `extract`/`judge`/`converse`/`seed_error` path.
+  When the Listen surface is built, do NOT reach for `mlx-whisper` (Apple Silicon only): use
   `faster-whisper` (CTranslate2, CPU int8) or a hosted STT API for transcription.
 - `fixture` provider (`FixtureProvider`) is deterministic and network-free, for tests/offline dev;
-  it implements all three purposes, each via a small set of hardcoded rules (e.g. `judge` flags the
-  literal phrases "hacer sentido", "depender que", "muy muy" — see `providers/fixture.ts`), not a
-  real judgment — treat its eval numbers as rule-coverage, not judge quality.
+  it implements all four purposes, each via a small set of hardcoded rules (e.g. `judge` flags the
+  literal phrases "hacer sentido", "depender que", "muy muy"; `seed_error` reuses the gold-set
+  catalogue, `src/server/goldset/catalogue.ts` — see `providers/fixture.ts`), not a real
+  judgment/injection — treat its eval numbers as rule-coverage, not judge quality.
 - Both live behind the `ModelProvider` interface (`provider.ts`) — `completeJson<T>` in,
   schema-validated `{ data, model, usage }` out. Don't call the Anthropic SDK from anywhere else.
 - On `claude-opus-5`, never pass `thinking`, `temperature`, or `top_p` — the API rejects them.

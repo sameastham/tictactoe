@@ -4,8 +4,13 @@ import { describe, expect, it } from "vitest";
 import { createTestDb, type Db } from "@/db";
 import { modelCalls } from "@/db/schema";
 import { createContent } from "@/server/repo";
-import type { ConverseInput, ExtractInput, JudgeInput, JudgeWireResult, LearnerBlock } from "@/lib/contracts";
-import { CONVERSE_PROMPT_VERSION, EXTRACT_PROMPT_VERSION, JUDGE_PROMPT_VERSION } from "@/server/language/prompts";
+import type { ConverseInput, ExtractInput, JudgeInput, JudgeWireResult, LearnerBlock, SeedErrorInput } from "@/lib/contracts";
+import {
+  CONVERSE_PROMPT_VERSION,
+  EXTRACT_PROMPT_VERSION,
+  JUDGE_PROMPT_VERSION,
+  SEED_ERROR_PROMPT_VERSION,
+} from "@/server/language/prompts";
 import { FixtureProvider } from "@/server/language/providers/fixture";
 import { ProviderError, type ModelProvider } from "@/server/language/providers/provider";
 import { createLanguageService } from "@/server/language/service";
@@ -301,6 +306,50 @@ describe("LanguageService.converse — with FixtureProvider", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].ok).toBe(false);
     expect(rows[0].purpose).toBe("converse");
+    expect(rows[0].error).toMatch(/boom/);
+  });
+});
+
+describe("LanguageService.seedError — with FixtureProvider", () => {
+  it("returns the fixture's catalogue-based result and logs a successful model_calls row with purpose seed_error", async () => {
+    const db: Db = createTestDb();
+    const service = createLanguageService({ db, provider: new FixtureProvider() });
+    const input: SeedErrorInput = { sentence: "Esto tiene sentido para mí.", allowed_tags: ["word_choice"] };
+
+    const { result, model } = await service.seedError(input, makeLearner());
+
+    expect(model).toBe("fixture");
+    expect(result.can_inject).toBe(true);
+    expect(result.mutated).toBe("Esto hace sentido para mí.");
+    expect(result.tag).toBe("word_choice");
+
+    const rows = db.select().from(modelCalls).all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ok).toBe(true);
+    expect(rows[0].provider).toBe("fixture");
+    expect(rows[0].purpose).toBe("seed_error");
+    expect(rows[0].costUsd).toBe(0);
+    expect(rows[0].promptVersion).toBe(SEED_ERROR_PROMPT_VERSION);
+    expect(rows[0].error).toBeNull();
+  });
+
+  it("logs a failed model_calls row and lets the error propagate on provider failure", async () => {
+    const db: Db = createTestDb();
+    const throwingProvider: ModelProvider = {
+      name: "stub-throw",
+      async completeJson() {
+        throw new ProviderError("boom: simulated seed_error failure", true);
+      },
+    };
+    const service = createLanguageService({ db, provider: throwingProvider });
+    const input: SeedErrorInput = { sentence: "Una oración cualquiera de prueba.", allowed_tags: ["grammar"] };
+
+    await expect(service.seedError(input, makeLearner())).rejects.toThrow(/boom/);
+
+    const rows = db.select().from(modelCalls).all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ok).toBe(false);
+    expect(rows[0].purpose).toBe("seed_error");
     expect(rows[0].error).toMatch(/boom/);
   });
 });

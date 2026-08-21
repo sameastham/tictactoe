@@ -124,6 +124,43 @@ export const ConverseResultSchema = z.object({
 });
 export type ConverseResult = z.infer<typeof ConverseResultSchema>;
 
+// -----------------------------------------------------------------------------
+// seed_error — gold-set error injection (never a user-facing surface; used only
+// by `src/server/goldset/build.ts`'s model mode, see CLAUDE.md Sec.3/Sec.5).
+// -----------------------------------------------------------------------------
+
+/** Input to the seed-error model call: one confirmed-natural sentence + which error-type tags may be injected. */
+export const SeedErrorInputSchema = z.object({
+  sentence: z.string().min(8),
+  allowed_tags: z.array(z.enum(TAXONOMY)).min(1),
+});
+export type SeedErrorInput = z.infer<typeof SeedErrorInputSchema>;
+
+/**
+ * Raw seed-error model output — the wire shape used directly as the
+ * `zodOutputFormat` schema for the seed_error model call. When `can_inject`
+ * is `false`, every other field is `null` (the model found nothing
+ * realistically injectable of the offered `allowed_tags`, or the sentence
+ * already reads as marked/incorrect). When `can_inject` is `true`, all five
+ * other fields are non-null: `original_span`/`mutated_span` are the exact
+ * substring replaced and its replacement (both verbatim), and `mutated` is
+ * `sentence` with that one replacement applied — `verifySingleChange`
+ * (`src/server/goldset/build.ts`) is the rule check that confirms the model
+ * actually held to that contract before a mutation is ever inserted into
+ * `gold_set`.
+ */
+export const SeedErrorWireResultSchema = z.object({
+  can_inject: z.boolean(),
+  mutated: z.string().nullable(),
+  tag: z.enum(TAXONOMY).nullable(),
+  expected_rung: z.enum(["incorrect", "acceptable"]).nullable(),
+  /** Verbatim substring of the input `sentence` — the span that was replaced. */
+  original_span: z.string().nullable(),
+  /** Its replacement — the broken form actually spliced into `mutated`. */
+  mutated_span: z.string().nullable(),
+});
+export type SeedErrorWireResult = z.infer<typeof SeedErrorWireResultSchema>;
+
 /** Payload of a `captured` event: a candidate the learner chose to keep. */
 export const CapturedPayloadSchema = z.object({
   candidateId: z.string(),

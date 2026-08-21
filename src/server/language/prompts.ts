@@ -5,8 +5,9 @@ import type { LearnerBlock } from "@/lib/contracts";
 export const EXTRACT_PROMPT_VERSION = "v1";
 export const JUDGE_PROMPT_VERSION = "v1";
 export const CONVERSE_PROMPT_VERSION = "v1";
+export const SEED_ERROR_PROMPT_VERSION = "v1";
 
-export type PromptName = "extract" | "judge" | "converse";
+export type PromptName = "extract" | "judge" | "converse" | "seed_error";
 
 export type LoadedPrompt = {
   name: PromptName;

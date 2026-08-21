@@ -5,9 +5,11 @@ import {
   ConverseResultSchema,
   ExtractResultSchema,
   JudgeWireResultSchema,
+  SeedErrorWireResultSchema,
   type ConverseInput,
   type ExtractResult,
   type JudgeInput,
+  type SeedErrorInput,
 } from "@/lib/contracts";
 import { FixtureProvider } from "@/server/language/providers/fixture";
 import type { ModelJsonRequest } from "@/server/language/providers/provider";
@@ -42,6 +44,16 @@ function converseRequest(input: ConverseInput) {
     user: JSON.stringify(input),
     schema: ConverseResultSchema,
     maxTokens: 2000,
+  };
+}
+
+function seedErrorRequest(input: SeedErrorInput) {
+  return {
+    purpose: "seed_error" as const,
+    system: "system prompt (unused by the fixture provider)",
+    user: JSON.stringify(input),
+    schema: SeedErrorWireResultSchema,
+    maxTokens: 1000,
   };
 }
 
@@ -247,5 +259,60 @@ describe("FixtureProvider — converse — deterministic by turn count", () => {
     const provider = new FixtureProvider();
     const res = await provider.completeJson(converseRequest({ topic: "Un tema", messages: [] }));
     expect(() => ConverseResultSchema.parse(res.data)).not.toThrow();
+  });
+});
+
+describe("FixtureProvider — seed_error — reuses the goldset catalogue", () => {
+  it("matches the first catalogue injector whose tag is allowed and pattern matches", async () => {
+    const provider = new FixtureProvider();
+    const res = await provider.completeJson(
+      seedErrorRequest({ sentence: "Esto tiene sentido para mí.", allowed_tags: ["word_choice"] }),
+    );
+    expect(res.data).toEqual({
+      can_inject: true,
+      mutated: "Esto hace sentido para mí.",
+      tag: "word_choice",
+      expected_rung: "incorrect",
+      original_span: "tiene sentido",
+      mutated_span: "hace sentido",
+    });
+    expect(res.model).toBe("fixture");
+  });
+
+  it("respects allowed_tags: a matching injector whose tag isn't offered doesn't fire", async () => {
+    const provider = new FixtureProvider();
+    const res = await provider.completeJson(
+      seedErrorRequest({ sentence: "Esto tiene sentido para mí.", allowed_tags: ["grammar"] }),
+    );
+    expect(res.data).toEqual({
+      can_inject: false,
+      mutated: null,
+      tag: null,
+      expected_rung: null,
+      original_span: null,
+      mutated_span: null,
+    });
+  });
+
+  it("can_inject: false when no catalogue injector matches the sentence at all", async () => {
+    const provider = new FixtureProvider();
+    const res = await provider.completeJson(
+      seedErrorRequest({ sentence: "El café ya está listo.", allowed_tags: ["idiomaticity", "discourse"] }),
+    );
+    expect(res.data.can_inject).toBe(false);
+    expect(res.data.mutated).toBeNull();
+    expect(res.data.tag).toBeNull();
+    expect(res.data.expected_rung).toBeNull();
+    expect(res.data.original_span).toBeNull();
+    expect(res.data.mutated_span).toBeNull();
+  });
+
+  it("is schema-valid against SeedErrorWireResultSchema", async () => {
+    const provider = new FixtureProvider();
+    const res = await provider.completeJson(
+      seedErrorRequest({ sentence: "Todo depende de que llueva mañana.", allowed_tags: ["preposition"] }),
+    );
+    expect(() => SeedErrorWireResultSchema.parse(res.data)).not.toThrow();
+    expect(res.data.can_inject).toBe(true);
   });
 });

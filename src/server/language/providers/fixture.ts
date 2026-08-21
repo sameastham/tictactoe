@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { JudgeIssue, JudgeTargetItem, JudgedSentenceWire } from "@/lib/contracts";
-import type { Rung } from "@/lib/taxonomy";
+import type { Rung, TaxonomyTag } from "@/lib/taxonomy";
+import { applyInjector, injectorMatches, injectorSpans, CATALOGUE } from "@/server/goldset/catalogue";
 import {
   ProviderError,
   type ModelJsonRequest,
@@ -247,9 +248,79 @@ function converseFixtureReply(messages: FixtureConverseInput["messages"]): strin
   return CONVERSE_REPLIES[Math.min(learnerTurnCount, CONVERSE_REPLIES.length - 1)];
 }
 
+/** The user-message shape `LanguageService.seedError` sends to every provider. */
+type FixtureSeedErrorInput = {
+  sentence: string;
+  allowed_tags: TaxonomyTag[];
+};
+
+/** Parses the seed_error user message. Malformed/missing fields degrade to empty rather than throwing. */
+function parseSeedErrorUser(user: string): FixtureSeedErrorInput {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(user);
+  } catch {
+    parsed = {};
+  }
+  const obj = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, unknown>;
+  const sentence = typeof obj.sentence === "string" ? obj.sentence : "";
+  const allowed_tags = Array.isArray(obj.allowed_tags) ? (obj.allowed_tags as TaxonomyTag[]) : [];
+  return { sentence, allowed_tags };
+}
+
+/**
+ * Deterministically synthesizes a seed_error-shaped result by reusing the
+ * same rule-based catalogue the "rules" gold-set mode uses
+ * (`src/server/goldset/catalogue.ts`): the first `CATALOGUE` injector (in
+ * catalogue order) whose pattern matches `sentence` AND whose tag is in
+ * `allowed_tags` is applied; no match -> `can_inject: false` with every
+ * other field null, same contract the real model's prompt promises.
+ */
+function synthesizeSeedErrorResult(input: FixtureSeedErrorInput): unknown {
+  const allowed = new Set(input.allowed_tags);
+  const injector = CATALOGUE.find(
+    (candidate) => allowed.has(candidate.tag) && injectorMatches(candidate, input.sentence),
+  );
+
+  if (!injector) {
+    return {
+      can_inject: false,
+      mutated: null,
+      tag: null,
+      expected_rung: null,
+      original_span: null,
+      mutated_span: null,
+    };
+  }
+
+  const spans = injectorSpans(injector, input.sentence);
+  // injectorMatches just confirmed a match, so this can't be null in
+  // practice — guarded anyway rather than asserted.
+  if (!spans) {
+    return {
+      can_inject: false,
+      mutated: null,
+      tag: null,
+      expected_rung: null,
+      original_span: null,
+      mutated_span: null,
+    };
+  }
+
+  return {
+    can_inject: true,
+    mutated: applyInjector(injector, input.sentence),
+    tag: injector.tag,
+    expected_rung: injector.expectedRung,
+    original_span: spans.original,
+    mutated_span: spans.replacement,
+  };
+}
+
 /**
  * Deterministic, network-free model provider used in tests and local dev
- * without an API key. Implements "extract", "judge", and "converse".
+ * without an API key. Implements "extract", "judge", "converse", and
+ * "seed_error".
  */
 export class FixtureProvider implements ModelProvider {
   readonly name = "fixture";
@@ -305,6 +376,24 @@ export class FixtureProvider implements ModelProvider {
       const usage: ModelUsage = {
         inputTokens: Math.ceil(req.user.length / 4),
         outputTokens: 60,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      };
+
+      return { data, model: "fixture", usage };
+    }
+
+    if (req.purpose === "seed_error") {
+      const input = parseSeedErrorUser(req.user);
+      const raw = synthesizeSeedErrorResult(input);
+
+      // Always validate against the caller's schema (SeedErrorWireResultSchema)
+      // so the fixture data can never silently drift from the app's contract.
+      const data = req.schema.parse(raw);
+
+      const usage: ModelUsage = {
+        inputTokens: Math.ceil(req.user.length / 4),
+        outputTokens: 120,
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
       };

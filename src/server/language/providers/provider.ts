@@ -10,7 +10,7 @@ export interface ModelUsage {
 
 /** A request for a single structured-JSON model call. */
 export interface ModelJsonRequest<T> {
-  purpose: "extract" | "judge" | "converse";
+  purpose: "extract" | "judge" | "converse" | "seed_error";
   system: string;
   user: string;
   schema: z.ZodType<T>;

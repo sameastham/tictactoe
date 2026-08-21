@@ -164,6 +164,26 @@ function matchCase(source: string, target: string): string {
 }
 
 /**
+ * The exact original and replacement spans {@link applyInjector} would use
+ * for `injector` against `sentence` — `original` is the verbatim matched
+ * substring, `replacement` is `injector.broken` case-matched to it, `index`
+ * is where the match starts. Returns `null` if the pattern doesn't match.
+ * Exported so callers that need the literal spans (not just the mutated
+ * sentence) — e.g. `FixtureProvider`'s "seed_error" purpose, which reuses
+ * this catalogue to build a `SeedErrorWireResult` — don't have to
+ * reimplement the matching/case logic.
+ */
+export function injectorSpans(
+  injector: Injector,
+  sentence: string,
+): { original: string; replacement: string; index: number } | null {
+  const match = sentence.match(patternFor(injector));
+  if (!match || match.index === undefined) return null;
+  const matchedText = match[0];
+  return { original: matchedText, replacement: matchCase(matchedText, injector.broken), index: match.index };
+}
+
+/**
  * Applies `injector` to `sentence`: replaces the first (only) match of its
  * `natural` pattern with `broken`, capitalizing the replacement to match the
  * matched text's case (so a sentence-initial match stays capitalized).
@@ -171,9 +191,7 @@ function matchCase(source: string, target: string): string {
  * check {@link injectorMatches} first.
  */
 export function applyInjector(injector: Injector, sentence: string): string {
-  const match = sentence.match(patternFor(injector));
-  if (!match || match.index === undefined) return sentence;
-  const matchedText = match[0];
-  const replacement = matchCase(matchedText, injector.broken);
-  return sentence.slice(0, match.index) + replacement + sentence.slice(match.index + matchedText.length);
+  const spans = injectorSpans(injector, sentence);
+  if (!spans) return sentence;
+  return sentence.slice(0, spans.index) + spans.replacement + sentence.slice(spans.index + spans.original.length);
 }

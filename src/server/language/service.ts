@@ -6,6 +6,7 @@ import {
   ConverseResultSchema,
   ExtractResultSchema,
   JudgeWireResultSchema,
+  SeedErrorWireResultSchema,
   type ConverseInput,
   type ConverseResult,
   type ExtractInput,
@@ -16,11 +17,14 @@ import {
   type JudgedSentence,
   type JudgedSentenceWire,
   type LearnerBlock,
+  type SeedErrorInput,
+  type SeedErrorWireResult,
 } from "@/lib/contracts";
 import {
   CONVERSE_PROMPT_VERSION,
   EXTRACT_PROMPT_VERSION,
   JUDGE_PROMPT_VERSION,
+  SEED_ERROR_PROMPT_VERSION,
   loadPrompt,
   renderPrompt,
 } from "@/server/language/prompts";
@@ -40,6 +44,13 @@ export interface LanguageService {
   ): Promise<{ result: ExtractResult; model: string }>;
   judge(input: JudgeInput, learner: LearnerBlock): Promise<{ result: JudgeResult; model: string }>;
   converse(input: ConverseInput, learner: LearnerBlock): Promise<{ result: ConverseResult; model: string }>;
+  /**
+   * Gold-set error injection (plan Sec.6.3) — never called from a user-facing
+   * surface, only from `src/server/goldset/build.ts`'s model mode. Returns
+   * the raw wire result unvalidated beyond the schema itself; the caller is
+   * responsible for running `verifySingleChange` before trusting `mutated`.
+   */
+  seedError(input: SeedErrorInput, learner: LearnerBlock): Promise<{ result: SeedErrorWireResult; model: string }>;
 }
 
 /** trim + collapse all whitespace runs to a single space. */
@@ -349,7 +360,69 @@ export function createLanguageService(deps: { db: Db; provider: ModelProvider })
     return { result: response.data, model: response.model };
   }
 
-  return { extract, judge, converse };
+  /** Logs one model_calls row for the seed_error purpose, success or failure. */
+  function recordSeedErrorCall(params: {
+    ok: boolean;
+    error?: string | null;
+    response?: ModelJsonResponse<SeedErrorWireResult>;
+    durationMs: number;
+  }): void {
+    const { ok, error = null, response, durationMs } = params;
+    const usage = response?.usage ?? {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    };
+    const model = response?.model ?? process.env.MODEL_ID ?? "unknown";
+
+    logModelCall(db, {
+      purpose: "seed_error",
+      provider: provider.name,
+      model,
+      promptVersion: SEED_ERROR_PROMPT_VERSION,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheReadTokens: usage.cacheReadTokens,
+      cacheWriteTokens: usage.cacheWriteTokens,
+      costUsd: response ? computeCostUsd(model, usage) : 0,
+      durationMs,
+      ok,
+      error,
+      contentId: null,
+    });
+  }
+
+  async function seedError(
+    input: SeedErrorInput,
+    learner: LearnerBlock,
+  ): Promise<{ result: SeedErrorWireResult; model: string }> {
+    const prompt = renderPrompt(loadPrompt("seed_error", SEED_ERROR_PROMPT_VERSION).text, learner);
+    const userMessage = JSON.stringify(input);
+
+    const startedAt = Date.now();
+    let response: ModelJsonResponse<SeedErrorWireResult>;
+    try {
+      response = await provider.completeJson({
+        purpose: "seed_error",
+        system: prompt,
+        user: userMessage,
+        schema: SeedErrorWireResultSchema,
+        maxTokens: 1000,
+      });
+    } catch (error) {
+      const durationMs = Date.now() - startedAt;
+      const message = error instanceof Error ? error.message : String(error);
+      recordSeedErrorCall({ ok: false, error: message, durationMs });
+      throw error;
+    }
+    const durationMs = Date.now() - startedAt;
+
+    recordSeedErrorCall({ ok: true, response, durationMs });
+    return { result: response.data, model: response.model };
+  }
+
+  return { extract, judge, converse, seedError };
 }
 
 let cachedService: LanguageService | undefined;

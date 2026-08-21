@@ -183,7 +183,7 @@ export const modelCalls = sqliteTable(
   {
     id: text("id").primaryKey(),
     userId: text("user_id").notNull(),
-    purpose: text("purpose", { enum: ["extract", "judge", "converse"] }).notNull(),
+    purpose: text("purpose", { enum: ["extract", "judge", "converse", "seed_error"] }).notNull(),
     provider: text("provider").notNull(),
     model: text("model").notNull(),
     promptVersion: text("prompt_version").notNull(),
