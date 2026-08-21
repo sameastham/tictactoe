@@ -28,8 +28,19 @@ export const EVENT_TYPES = [
   "adjudicated",
   "evaluator_disagreement",
   "reviewed",
+  "item_avoided",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
+
+/**
+ * The judge's naturalness ladder (Fix surface), ordered low to high:
+ * "incorrect" (not understandable/wrong) < "acceptable" (understood but
+ * marked as foreign) < "natural" (what an educated Mexican would write in
+ * this register) < "precise" (tighter within the SAME register — never
+ * fancier or higher-register).
+ */
+export const RUNGS = ["incorrect", "acceptable", "natural", "precise"] as const;
+export type Rung = (typeof RUNGS)[number];
 
 /** App surfaces the learner can practice on. */
 export const SURFACES = ["read", "listen", "fix", "talk", "review"] as const;

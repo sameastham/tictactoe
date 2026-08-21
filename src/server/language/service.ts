@@ -1,17 +1,22 @@
 import type { Db } from "@/db";
 import { getDb } from "@/db";
+import { content } from "@/db/schema";
 import { logModelCall } from "@/server/repo";
 import {
   ExtractResultSchema,
+  JudgeWireResultSchema,
   type ConverseInput,
   type ConverseResult,
   type ExtractInput,
   type ExtractResult,
   type JudgeInput,
   type JudgeResult,
+  type JudgeWireResult,
+  type JudgedSentence,
+  type JudgedSentenceWire,
   type LearnerBlock,
 } from "@/lib/contracts";
-import { EXTRACT_PROMPT_VERSION, loadPrompt, renderPrompt } from "@/server/language/prompts";
+import { EXTRACT_PROMPT_VERSION, JUDGE_PROMPT_VERSION, loadPrompt, renderPrompt } from "@/server/language/prompts";
 import { computeCostUsd } from "@/server/language/pricing";
 import { getProvider } from "@/server/language/providers";
 import { ProviderError, type ModelJsonResponse, type ModelProvider } from "@/server/language/providers/provider";
@@ -29,7 +34,7 @@ export interface LanguageService {
     learner: LearnerBlock,
     opts?: { contentId?: string },
   ): Promise<{ result: ExtractResult; model: string }>;
-  judge(input: JudgeInput, learner: LearnerBlock): Promise<JudgeResult>;
+  judge(input: JudgeInput, learner: LearnerBlock): Promise<{ result: JudgeResult; model: string }>;
   converse(input: ConverseInput, learner: LearnerBlock): Promise<ConverseResult>;
 }
 
@@ -65,6 +70,50 @@ function cleanExtractResult(result: ExtractResult, articleText: string): Extract
   const candidates = clamped.map((candidate, i) => ({ ...candidate, id: `c${i + 1}` }));
 
   return { difficulty: result.difficulty, candidates };
+}
+
+/**
+ * True if `phrase`, whitespace-normalized, appears verbatim as a substring
+ * of any stored content's text. Single full-table scan — fine at this
+ * single-user scale. Used to mark a judge-proposed `better_version` as
+ * attested (drawn from real, previously-seen usage) vs. merely model-invented.
+ */
+function isAttested(db: Db, phrase: string): boolean {
+  const normalizedPhrase = normalizeWhitespace(phrase);
+  if (!normalizedPhrase) return false;
+  const rows = db.select({ text: content.text }).from(content).all();
+  return rows.some((row) => normalizeWhitespace(row.text).includes(normalizedPhrase));
+}
+
+/**
+ * Drops sentences that violate the judge prompt's hard constraint (`sentence`
+ * not verbatim in the submitted text), and clamps `items_used`/`items_avoided`
+ * to the ids that were actually offered as `target_items`.
+ */
+function cleanJudgeResult(result: JudgeWireResult, inputText: string, targetIds: Set<string>): JudgeWireResult {
+  const normalizedText = normalizeWhitespace(inputText);
+
+  const sentences = result.sentences.filter((sentence) => {
+    const normalizedSentence = normalizeWhitespace(sentence.sentence);
+    if (!normalizedText.includes(normalizedSentence)) {
+      console.warn(`judge: dropping sentence — not verbatim in the submitted text: "${sentence.sentence}"`);
+      return false;
+    }
+    return true;
+  });
+
+  return {
+    sentences,
+    items_used: result.items_used.filter((id) => targetIds.has(id)),
+    items_avoided: result.items_avoided.filter((id) => targetIds.has(id)),
+  };
+}
+
+/** better_version_attested = false when better_version is null; otherwise checked against the content store. */
+function computeAttestation(db: Db, sentence: JudgedSentenceWire): boolean {
+  if (sentence.better_version === null) return false;
+  if (isAttested(db, sentence.better_version)) return true;
+  return sentence.issues.some((issue) => isAttested(db, issue.fix));
 }
 
 export function createLanguageService(deps: { db: Db; provider: ModelProvider }): LanguageService {
@@ -148,8 +197,90 @@ export function createLanguageService(deps: { db: Db; provider: ModelProvider })
     return { result: cleaned, model: response.model };
   }
 
-  async function judge(_input: JudgeInput, _learner: LearnerBlock): Promise<JudgeResult> {
-    throw new NotImplementedError("judge is not implemented yet — see prompts/ and §4.2 of the plan");
+  /** Logs one model_calls row for the judge purpose, success or failure. */
+  function recordJudgeCall(params: {
+    ok: boolean;
+    error?: string | null;
+    response?: ModelJsonResponse<JudgeWireResult>;
+    durationMs: number;
+  }): void {
+    const { ok, error = null, response, durationMs } = params;
+    const usage = response?.usage ?? {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    };
+    const model = response?.model ?? process.env.MODEL_ID ?? "unknown";
+
+    logModelCall(db, {
+      purpose: "judge",
+      provider: provider.name,
+      model,
+      promptVersion: JUDGE_PROMPT_VERSION,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheReadTokens: usage.cacheReadTokens,
+      cacheWriteTokens: usage.cacheWriteTokens,
+      costUsd: response ? computeCostUsd(model, usage) : 0,
+      durationMs,
+      ok,
+      error,
+      contentId: null,
+    });
+  }
+
+  async function judge(
+    input: JudgeInput,
+    learner: LearnerBlock,
+  ): Promise<{ result: JudgeResult; model: string }> {
+    const prompt = renderPrompt(loadPrompt("judge", JUDGE_PROMPT_VERSION).text, learner);
+    const userMessage = JSON.stringify({
+      text: input.text,
+      task: input.task,
+      target_items: input.target_items,
+    });
+
+    const startedAt = Date.now();
+    let response: ModelJsonResponse<JudgeWireResult>;
+    try {
+      response = await provider.completeJson({
+        purpose: "judge",
+        system: prompt,
+        user: userMessage,
+        schema: JudgeWireResultSchema,
+        maxTokens: 16000,
+      });
+    } catch (error) {
+      const durationMs = Date.now() - startedAt;
+      const message = error instanceof Error ? error.message : String(error);
+      recordJudgeCall({ ok: false, error: message, durationMs });
+      throw error;
+    }
+    const durationMs = Date.now() - startedAt;
+
+    const targetIds = new Set(input.target_items.map((item) => item.id));
+    const cleaned = cleanJudgeResult(response.data, input.text, targetIds);
+
+    if (cleaned.sentences.length === 0) {
+      const error = new ProviderError("judge: no sentences survived post-validation", true);
+      recordJudgeCall({ ok: false, error: error.message, response, durationMs });
+      throw error;
+    }
+
+    const sentences: JudgedSentence[] = cleaned.sentences.map((sentence) => ({
+      ...sentence,
+      better_version_attested: computeAttestation(db, sentence),
+    }));
+
+    const result: JudgeResult = {
+      sentences,
+      items_used: cleaned.items_used,
+      items_avoided: cleaned.items_avoided,
+    };
+
+    recordJudgeCall({ ok: true, response, durationMs });
+    return { result, model: response.model };
   }
 
   async function converse(_input: ConverseInput, _learner: LearnerBlock): Promise<ConverseResult> {

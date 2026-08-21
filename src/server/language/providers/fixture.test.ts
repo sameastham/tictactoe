@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ExtractResultSchema, type ExtractResult } from "@/lib/contracts";
+import { ExtractResultSchema, JudgeWireResultSchema, type ExtractResult, type JudgeInput } from "@/lib/contracts";
 import { FixtureProvider } from "@/server/language/providers/fixture";
 import type { ModelJsonRequest } from "@/server/language/providers/provider";
 
@@ -14,6 +14,16 @@ function extractRequest(user: string): ModelJsonRequest<ExtractResult> {
     system: "system prompt (unused by the fixture provider)",
     user,
     schema: ExtractResultSchema,
+    maxTokens: 16000,
+  };
+}
+
+function judgeRequest(input: JudgeInput) {
+  return {
+    purpose: "judge" as const,
+    system: "system prompt (unused by the fixture provider)",
+    user: JSON.stringify(input),
+    schema: JudgeWireResultSchema,
     maxTokens: 16000,
   };
 }
@@ -76,20 +86,104 @@ describe("FixtureProvider — extract — synthetic path", () => {
   });
 });
 
-describe("FixtureProvider — judge/converse", () => {
-  it("throws a non-retryable ProviderError for judge", async () => {
+describe("FixtureProvider — judge — deterministic rules", () => {
+  it("'hacer sentido' -> incorrect, word_choice issue, swapped better_version", async () => {
     const provider = new FixtureProvider();
-    await expect(
-      provider.completeJson({
-        purpose: "judge",
-        system: "s",
-        user: "u",
-        schema: ExtractResultSchema,
-        maxTokens: 100,
-      }),
-    ).rejects.toThrow(/does not implement judge/);
+    const res = await provider.completeJson(
+      judgeRequest({ text: "No puedo hacer sentido de esto.", task: null, target_items: [] }),
+    );
+    expect(res.data.sentences).toHaveLength(1);
+    const sentence = res.data.sentences[0];
+    expect(sentence.rung).toBe("incorrect");
+    expect(sentence.issues).toEqual([
+      {
+        tag: "word_choice",
+        severity: "major",
+        span: "hacer sentido",
+        fix: "tener sentido",
+        note: "[fixture] calco del inglés 'to make sense'",
+      },
+    ]);
+    expect(sentence.better_version).toBe("No puedo tener sentido de esto.");
   });
 
+  it("'depender que' -> incorrect, preposition issue, swapped better_version", async () => {
+    const provider = new FixtureProvider();
+    const res = await provider.completeJson(
+      judgeRequest({ text: "Todo va a depender que llueva.", task: null, target_items: [] }),
+    );
+    const sentence = res.data.sentences[0];
+    expect(sentence.rung).toBe("incorrect");
+    expect(sentence.issues[0]).toMatchObject({ tag: "preposition", severity: "major", span: "depender que" });
+    expect(sentence.better_version).toBe("Todo va a depender de que llueva.");
+  });
+
+  it("'muy muy' -> acceptable, redundancy issue, swapped better_version", async () => {
+    const provider = new FixtureProvider();
+    const res = await provider.completeJson(
+      judgeRequest({ text: "Está muy muy cansado hoy.", task: null, target_items: [] }),
+    );
+    const sentence = res.data.sentences[0];
+    expect(sentence.rung).toBe("acceptable");
+    expect(sentence.issues[0]).toMatchObject({ tag: "redundancy", severity: "minor", span: "muy muy" });
+    expect(sentence.better_version).toBe("Está muy cansado hoy.");
+  });
+
+  it("a sentence matching no error pattern is natural with no issues and a null better_version", async () => {
+    const provider = new FixtureProvider();
+    const res = await provider.completeJson(
+      judgeRequest({ text: "El café ya está listo.", task: null, target_items: [] }),
+    );
+    const sentence = res.data.sentences[0];
+    expect(sentence.rung).toBe("natural");
+    expect(sentence.issues).toEqual([]);
+    expect(sentence.better_version).toBeNull();
+  });
+
+  it("credits items_used for a target chunk that appears in some sentence, items_avoided otherwise", async () => {
+    const provider = new FixtureProvider();
+    const res = await provider.completeJson(
+      judgeRequest({
+        text: "Ayer fui al mercado a comprar fruta. El clima estuvo agradable todo el día.",
+        task: null,
+        target_items: [
+          { id: "it_used", chunk: "ir al mercado" },
+          { id: "it_avoided", chunk: "hacer la maleta" },
+        ],
+      }),
+    );
+    expect(res.data.items_used).toEqual([]);
+    expect(res.data.items_avoided).toEqual(["it_used", "it_avoided"]);
+
+    const res2 = await provider.completeJson(
+      judgeRequest({
+        text: "Fui al mercado ayer. El clima estuvo agradable todo el día.",
+        task: null,
+        target_items: [
+          { id: "it_used", chunk: "al mercado" },
+          { id: "it_avoided", chunk: "hacer la maleta" },
+        ],
+      }),
+    );
+    expect(res2.data.items_used).toEqual(["it_used"]);
+    expect(res2.data.items_avoided).toEqual(["it_avoided"]);
+  });
+
+  it("is schema-valid against JudgeWireResultSchema", async () => {
+    const provider = new FixtureProvider();
+    const res = await provider.completeJson(
+      judgeRequest({
+        text: "Esto no puede hacer sentido. El café ya está listo.",
+        task: null,
+        target_items: [],
+      }),
+    );
+    expect(() => JudgeWireResultSchema.parse(res.data)).not.toThrow();
+    expect(res.model).toBe("fixture");
+  });
+});
+
+describe("FixtureProvider — converse", () => {
   it("throws a non-retryable ProviderError for converse", async () => {
     const provider = new FixtureProvider();
     await expect(

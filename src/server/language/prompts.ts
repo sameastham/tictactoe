@@ -3,6 +3,7 @@ import path from "node:path";
 import type { LearnerBlock } from "@/lib/contracts";
 
 export const EXTRACT_PROMPT_VERSION = "v1";
+export const JUDGE_PROMPT_VERSION = "v1";
 
 export type PromptName = "extract" | "judge" | "converse";
 

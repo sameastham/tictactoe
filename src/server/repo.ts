@@ -1,9 +1,20 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "@/db";
-import { content, events, items, modelCalls, sessions } from "@/db/schema";
+import { content, events, goldSet, items, modelCalls, sessions, writings } from "@/db/schema";
 import { DEFAULT_USER_ID, newId } from "@/lib/ids";
-import type { Candidate, CapturedPayload, DiscardedPayload, StoredExtraction } from "@/lib/contracts";
-import type { Surface } from "@/lib/taxonomy";
+import type {
+  AdjudicatedPayload,
+  Candidate,
+  CapturedPayload,
+  DiscardedPayload,
+  ItemAvoidedPayload,
+  JudgeResult,
+  JudgeTargetItem,
+  ProducedErrorPayload,
+  ProducedOkPayload,
+  StoredExtraction,
+} from "@/lib/contracts";
+import type { Rung, Surface } from "@/lib/taxonomy";
 
 /** Thrown by {@link recordDecision} when a candidate already has a keep/discard decision. */
 export class AlreadyDecidedError extends Error {
@@ -13,10 +24,28 @@ export class AlreadyDecidedError extends Error {
   }
 }
 
+/** Thrown by {@link recordAdjudication} when the writing doesn't exist or hasn't been judged yet. */
+export class WritingNotJudgedError extends Error {
+  constructor(writingId: string) {
+    super(`Writing ${writingId} does not exist or has not been judged yet`);
+    this.name = "WritingNotJudgedError";
+  }
+}
+
+/** Thrown by {@link recordAdjudication} when `sentenceIndex` is out of range for the writing's judgment. */
+export class SentenceIndexOutOfRangeError extends Error {
+  constructor(writingId: string, sentenceIndex: number) {
+    super(`Writing ${writingId} has no judged sentence at index ${sentenceIndex}`);
+    this.name = "SentenceIndexOutOfRangeError";
+  }
+}
+
 export type ContentRow = typeof content.$inferSelect;
 export type ItemRow = typeof items.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;
 export type EventRow = typeof events.$inferSelect;
+export type WritingRow = typeof writings.$inferSelect;
+export type GoldSetRow = typeof goldSet.$inferSelect;
 
 // -----------------------------------------------------------------------------
 // content
@@ -89,6 +118,21 @@ export function saveExtraction(db: Db, contentId: string, extraction: StoredExtr
     .set({ extraction, difficulty: extraction.result.difficulty })
     .where(eq(content.id, contentId))
     .run();
+}
+
+// -----------------------------------------------------------------------------
+// items (read helpers)
+// -----------------------------------------------------------------------------
+
+/** Fetches item rows by id. Unknown ids are silently dropped, not errors. */
+export function getItemsByIds(db: Db, ids: string[]): ItemRow[] {
+  if (ids.length === 0) return [];
+  return db.select().from(items).where(inArray(items.id, ids)).all();
+}
+
+/** Lists the most recently captured items — used to offer target items before the FSRS scheduler exists. */
+export function listRecentItems(db: Db, limit = 20): ItemRow[] {
+  return db.select().from(items).orderBy(desc(items.createdAt)).limit(limit).all();
 }
 
 // -----------------------------------------------------------------------------
@@ -223,6 +267,249 @@ export function createSession(db: Db, data: CreateSessionInput): SessionRow {
   };
   db.insert(sessions).values(row).run();
   return db.select().from(sessions).where(eq(sessions.id, row.id)).get()!;
+}
+
+// -----------------------------------------------------------------------------
+// writings (Fix surface)
+// -----------------------------------------------------------------------------
+
+export type CreateWritingInput = {
+  task?: string | null;
+  text: string;
+  sessionId?: string | null;
+};
+
+/** Inserts a new, not-yet-judged writing and returns the persisted row. */
+export function createWriting(db: Db, data: CreateWritingInput): WritingRow {
+  const row: typeof writings.$inferInsert = {
+    id: newId(),
+    userId: DEFAULT_USER_ID,
+    task: data.task ?? null,
+    text: data.text,
+    judgment: null,
+    promptVersion: null,
+    model: null,
+    sessionId: data.sessionId ?? null,
+    createdAt: new Date(),
+  };
+  db.insert(writings).values(row).run();
+  return getWriting(db, row.id)!;
+}
+
+/** Fetches a single writing row by id, or undefined if it doesn't exist. */
+export function getWriting(db: Db, id: string): WritingRow | undefined {
+  return db.select().from(writings).where(eq(writings.id, id)).get();
+}
+
+/** Lists the most recently created writings. */
+export function listWritings(db: Db, limit = 20): WritingRow[] {
+  return db.select().from(writings).orderBy(desc(writings.createdAt)).limit(limit).all();
+}
+
+/**
+ * Persists a model judgment onto a writing row. `writings` is not part of
+ * the append-only event log, so updating it in place is fine — the
+ * corresponding `produced_ok`/`produced_error`/`item_avoided` events (see
+ * {@link recordJudgmentEvents}) are what make the judgment durable history.
+ */
+export function saveJudgment(
+  db: Db,
+  writingId: string,
+  judgment: JudgeResult,
+  promptVersion: string,
+  model: string,
+): void {
+  db.update(writings).set({ judgment, promptVersion, model }).where(eq(writings.id, writingId)).run();
+}
+
+export type RecordJudgmentEventsInput = {
+  writingId: string;
+  judgment: JudgeResult;
+  targetItems: JudgeTargetItem[];
+  /** The writing's task, echoed onto `item_avoided` payloads. */
+  task?: string | null;
+};
+
+export type RecordJudgmentEventsCounts = {
+  producedOk: number;
+  producedError: number;
+  itemAvoided: number;
+};
+
+/**
+ * Records the event-log consequences of one judgment, in a single
+ * transaction: one `produced_error` event per issue on an `incorrect`
+ * sentence, one `produced_ok` event per used target item, one `item_avoided`
+ * event per avoided target item.
+ */
+export function recordJudgmentEvents(db: Db, input: RecordJudgmentEventsInput): RecordJudgmentEventsCounts {
+  const { writingId, judgment, targetItems, task = null } = input;
+  const chunkById = new Map(targetItems.map((item) => [item.id, item.chunk]));
+
+  return db.transaction((tx) => {
+    const now = new Date();
+    let producedOk = 0;
+    let producedError = 0;
+    let itemAvoided = 0;
+
+    for (const sentence of judgment.sentences) {
+      if (sentence.rung !== "incorrect") continue;
+      for (const issue of sentence.issues) {
+        const payload: ProducedErrorPayload = {
+          tag: issue.tag,
+          severity: issue.severity,
+          span: issue.span,
+          fix: issue.fix,
+          note: issue.note,
+          sentence: sentence.sentence,
+          writingId,
+        };
+        tx.insert(events)
+          .values({
+            id: newId(),
+            userId: DEFAULT_USER_ID,
+            type: "produced_error",
+            surface: "fix",
+            taxonomy: issue.tag,
+            severity: issue.severity,
+            payload,
+            createdAt: now,
+          })
+          .run();
+        producedError++;
+      }
+    }
+
+    for (const itemId of judgment.items_used) {
+      const chunk = chunkById.get(itemId) ?? null;
+      const sentenceRow = chunk !== null ? judgment.sentences.find((s) => s.sentence.includes(chunk)) : undefined;
+      const payload: ProducedOkPayload = {
+        itemId,
+        chunk,
+        sentence: sentenceRow?.sentence ?? "",
+        rung: sentenceRow?.rung ?? "natural",
+        writingId,
+      };
+      tx.insert(events)
+        .values({
+          id: newId(),
+          userId: DEFAULT_USER_ID,
+          type: "produced_ok",
+          surface: "fix",
+          itemId,
+          payload,
+          createdAt: now,
+        })
+        .run();
+      producedOk++;
+    }
+
+    for (const itemId of judgment.items_avoided) {
+      const payload: ItemAvoidedPayload = {
+        itemId,
+        chunk: chunkById.get(itemId) ?? "",
+        writingId,
+        task,
+      };
+      tx.insert(events)
+        .values({
+          id: newId(),
+          userId: DEFAULT_USER_ID,
+          type: "item_avoided",
+          surface: "fix",
+          itemId,
+          payload,
+          createdAt: now,
+        })
+        .run();
+      itemAvoided++;
+    }
+
+    return { producedOk, producedError, itemAvoided };
+  });
+}
+
+/**
+ * True if `writingId`/`sentenceIndex` already has an `adjudicated` event —
+ * derived by scanning payloads (append-only log, so "any match" is enough;
+ * we never need "the latest one").
+ */
+export function hasAdjudication(db: Db, writingId: string, sentenceIndex: number): boolean {
+  const rows = db
+    .select({ payload: events.payload })
+    .from(events)
+    .where(and(eq(events.userId, DEFAULT_USER_ID), eq(events.type, "adjudicated")))
+    .all();
+  return rows.some((row) => {
+    const payload = row.payload as AdjudicatedPayload;
+    return payload.writingId === writingId && payload.sentenceIndex === sentenceIndex;
+  });
+}
+
+export type RecordAdjudicationInput = {
+  writingId: string;
+  sentenceIndex: number;
+  learnerRung: Rung;
+  note?: string | null;
+};
+
+/**
+ * Records the learner's override of the model's rung for one judged
+ * sentence, in a single transaction: an `adjudicated` event plus a
+ * `gold_set` row. Throws {@link WritingNotJudgedError} if the writing
+ * doesn't exist or hasn't been judged yet, {@link SentenceIndexOutOfRangeError}
+ * if `sentenceIndex` is out of range.
+ */
+export function recordAdjudication(db: Db, input: RecordAdjudicationInput): { goldSetId: string } {
+  const { writingId, sentenceIndex, learnerRung, note = null } = input;
+
+  return db.transaction((tx) => {
+    const writing = tx.select().from(writings).where(eq(writings.id, writingId)).get();
+    if (!writing || !writing.judgment) {
+      throw new WritingNotJudgedError(writingId);
+    }
+
+    const sentence = writing.judgment.sentences[sentenceIndex];
+    if (!sentence) {
+      throw new SentenceIndexOutOfRangeError(writingId, sentenceIndex);
+    }
+
+    const now = new Date();
+    const payload: AdjudicatedPayload = {
+      writingId,
+      sentenceIndex,
+      sentence: sentence.sentence,
+      modelRung: sentence.rung,
+      learnerRung,
+      note,
+    };
+    tx.insert(events)
+      .values({
+        id: newId(),
+        userId: DEFAULT_USER_ID,
+        type: "adjudicated",
+        surface: "fix",
+        payload,
+        createdAt: now,
+      })
+      .run();
+
+    const goldSetId = newId();
+    tx.insert(goldSet)
+      .values({
+        id: goldSetId,
+        userId: DEFAULT_USER_ID,
+        sentence: sentence.sentence,
+        set: "adjudicated",
+        expectedRung: learnerRung,
+        expectedTags: [],
+        origin: `fix_override:${writingId}`,
+        createdAt: now,
+      })
+      .run();
+
+    return { goldSetId };
+  });
 }
 
 // -----------------------------------------------------------------------------

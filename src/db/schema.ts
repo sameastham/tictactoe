@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { CEFR_LEVELS, EVENT_TYPES, REGISTERS, SURFACES, TAXONOMY, type TaxonomyTag } from "@/lib/taxonomy";
-import type { EventPayload, StoredExtraction, WordTimestamp } from "@/lib/contracts";
+import type { EventPayload, JudgeResult, StoredExtraction, WordTimestamp } from "@/lib/contracts";
 
 /** A piece of source content (article/paste/audio/video) the learner consumed. */
 export const content = sqliteTable(
@@ -58,6 +58,23 @@ export const sessions = sqliteTable(
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [index("sessions_user_started_idx").on(table.userId, table.startedAt)],
+);
+
+/** A learner-produced piece of writing (Fix surface), and the judge's verdict on it once judged. */
+export const writings = sqliteTable(
+  "writings",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    task: text("task"),
+    text: text("text").notNull(),
+    judgment: text("judgment", { mode: "json" }).$type<JudgeResult>(),
+    promptVersion: text("prompt_version"),
+    model: text("model"),
+    sessionId: text("session_id").references(() => sessions.id),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [index("writings_user_created_idx").on(table.userId, table.createdAt)],
 );
 
 /** The append-only event log — the single source of truth for everything that happens. */

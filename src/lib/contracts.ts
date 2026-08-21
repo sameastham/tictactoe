@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CEFR_LEVELS, REGISTERS, TAXONOMY } from "@/lib/taxonomy";
+import { CEFR_LEVELS, REGISTERS, RUNGS, TAXONOMY } from "@/lib/taxonomy";
 
 /** Learner profile block injected into model prompts. */
 export const LearnerBlockSchema = z.object({
@@ -38,30 +38,76 @@ export const ExtractInputSchema = z.object({
 });
 export type ExtractInput = z.infer<typeof ExtractInputSchema>;
 
-/** Input to the judge model call: a learner-produced sentence to evaluate. */
+/** One item the learner was asked (or chose) to try to use in this writing. */
+export const JudgeTargetItemSchema = z.object({
+  id: z.string(),
+  chunk: z.string(),
+});
+export type JudgeTargetItem = z.infer<typeof JudgeTargetItemSchema>;
+
+/** Input to the judge model call: a full learner-produced writing, judged sentence by sentence. */
 export const JudgeInputSchema = z.object({
-  sentence: z.string(),
+  text: z.string().min(1),
   task: z.string().nullable(),
-  targetItemIds: z.array(z.string()),
+  target_items: z.array(JudgeTargetItemSchema),
 });
 export type JudgeInput = z.infer<typeof JudgeInputSchema>;
 
+/** A single issue found within one judged sentence. */
+export const JudgeIssueSchema = z.object({
+  tag: z.enum(TAXONOMY),
+  severity: z.enum(["minor", "major"]),
+  /** Verbatim substring of the sentence being judged. */
+  span: z.string(),
+  /** The corrected span. */
+  fix: z.string(),
+  /** One line: why this is an issue. */
+  note: z.string(),
+});
+export type JudgeIssue = z.infer<typeof JudgeIssueSchema>;
+
 /**
- * Judge verdict. `rung` is the product's core naturalness ladder:
- * incorrect < acceptable < natural < precise.
+ * One judged sentence exactly as the model returns it — the wire shape used
+ * directly as the `zodOutputFormat` schema for the judge model call.
+ */
+export const JudgedSentenceWireSchema = z.object({
+  /** Verbatim substring of the input text — anchors UI rendering. */
+  sentence: z.string(),
+  rung: z.enum(RUNGS),
+  issues: z.array(JudgeIssueSchema),
+  /** Null when `rung` is "natural"/"precise" and there is nothing to add — no invented improvements. */
+  better_version: z.string().nullable(),
+});
+export type JudgedSentenceWire = z.infer<typeof JudgedSentenceWireSchema>;
+
+/** Raw judge model output: one entry per sentence in the learner's writing. */
+export const JudgeWireResultSchema = z.object({
+  sentences: z.array(JudgedSentenceWireSchema).min(1),
+  /** Ids (from `target_items`) the learner productively used. */
+  items_used: z.array(z.string()),
+  /** Ids (from `target_items`) that were never used. */
+  items_avoided: z.array(z.string()),
+});
+export type JudgeWireResult = z.infer<typeof JudgeWireResultSchema>;
+
+/**
+ * A judged sentence enriched by `LanguageService.judge`: adds whether the
+ * proposed `better_version` is attested (verbatim, whitespace-normalized) in
+ * the content store, rather than merely model-invented.
+ */
+export const JudgedSentenceSchema = JudgedSentenceWireSchema.extend({
+  better_version_attested: z.boolean(),
+});
+export type JudgedSentence = z.infer<typeof JudgedSentenceSchema>;
+
+/**
+ * Full judge result: what `service.judge` returns and what gets persisted on
+ * a `writings` row and served to the client.
  */
 export const JudgeResultSchema = z.object({
-  rung: z.enum(["incorrect", "acceptable", "natural", "precise"]),
-  errors: z.array(
-    z.object({
-      tag: z.enum(TAXONOMY),
-      severity: z.enum(["minor", "major"]),
-      span: z.string(),
-      fix: z.string(),
-      note: z.string(),
-    }),
-  ),
-  better_version: z.string().nullable(),
+  sentences: z.array(JudgedSentenceSchema),
+  items_used: z.array(z.string()),
+  items_avoided: z.array(z.string()),
 });
 export type JudgeResult = z.infer<typeof JudgeResultSchema>;
 
@@ -93,11 +139,60 @@ export const DiscardedPayloadSchema = z.object({
 });
 export type DiscardedPayload = z.infer<typeof DiscardedPayloadSchema>;
 
+/** Payload of a `produced_ok` event: a target item used correctly (or an already-natural sentence). */
+export const ProducedOkPayloadSchema = z.object({
+  itemId: z.string().nullable(),
+  chunk: z.string().nullable(),
+  sentence: z.string(),
+  rung: z.enum(RUNGS),
+  writingId: z.string(),
+});
+export type ProducedOkPayload = z.infer<typeof ProducedOkPayloadSchema>;
+
+/** Payload of a `produced_error` event: one judged issue within one sentence of a writing. */
+export const ProducedErrorPayloadSchema = z.object({
+  tag: z.enum(TAXONOMY),
+  severity: z.enum(["minor", "major"]),
+  span: z.string(),
+  fix: z.string(),
+  note: z.string(),
+  sentence: z.string(),
+  writingId: z.string(),
+});
+export type ProducedErrorPayload = z.infer<typeof ProducedErrorPayloadSchema>;
+
+/** Payload of an `item_avoided` event: a target item the learner never used in a writing. */
+export const ItemAvoidedPayloadSchema = z.object({
+  itemId: z.string(),
+  chunk: z.string(),
+  writingId: z.string(),
+  task: z.string().nullable(),
+});
+export type ItemAvoidedPayload = z.infer<typeof ItemAvoidedPayloadSchema>;
+
+/** Payload of an `adjudicated` event: the learner's override of the model's rung for one sentence. */
+export const AdjudicatedPayloadSchema = z.object({
+  writingId: z.string(),
+  sentenceIndex: z.number().int().nonnegative(),
+  sentence: z.string(),
+  modelRung: z.enum(RUNGS),
+  learnerRung: z.enum(RUNGS),
+  note: z.string().nullable(),
+});
+export type AdjudicatedPayload = z.infer<typeof AdjudicatedPayloadSchema>;
+
 /**
  * Union of all event payload shapes. Other event types get real schemas
  * once their surfaces are built; until then they fall back to a loose record.
  */
-export type EventPayload = CapturedPayload | DiscardedPayload | Record<string, unknown>;
+export type EventPayload =
+  | CapturedPayload
+  | DiscardedPayload
+  | ProducedOkPayload
+  | ProducedErrorPayload
+  | ItemAvoidedPayload
+  | AdjudicatedPayload
+  | Record<string, unknown>;
 
 /** A model extraction result as persisted on a content row, with provenance. */
 export const StoredExtractionSchema = z.object({
@@ -123,6 +218,23 @@ export const DecisionBodySchema = z.object({
   action: z.enum(["keep", "discard"]),
 });
 export type DecisionBody = z.infer<typeof DecisionBodySchema>;
+
+/** Body of the "submit a writing for judgment" (Fix) API request. */
+export const FixBodySchema = z.object({
+  text: z.string().min(1).max(4000),
+  task: z.string().optional(),
+  targetItemIds: z.array(z.string()).optional(),
+});
+export type FixBody = z.infer<typeof FixBodySchema>;
+
+/** Body of the "adjudicate a judged sentence" API request. */
+export const AdjudicationBodySchema = z.object({
+  writingId: z.string(),
+  sentenceIndex: z.number().int().min(0),
+  learnerRung: z.enum(RUNGS),
+  note: z.string().optional(),
+});
+export type AdjudicationBody = z.infer<typeof AdjudicationBodySchema>;
 
 /** A single word's timing within an audio/video transcript. */
 export type WordTimestamp = { w: string; startMs: number; endMs: number };
