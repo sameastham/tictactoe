@@ -1,4 +1,5 @@
 apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
 
 android {
     namespace = "mx.espanolcoach.app"
@@ -22,6 +23,25 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+    // Kotlin (tunnel-mode classes) needs to agree with Java's target, or
+    // the Kotlin/Java compile tasks fail with a JVM-target mismatch.
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
+    }
+    kotlinOptions {
+        jvmTarget = "21"
+    }
+    testOptions {
+        unitTests {
+            // TsBridgeBinder (TsBridge.kt) logs via android.util.Log, which
+            // the plain JVM unit-test stub jar throws on by default ("not
+            // mocked") rather than returning a value. No Robolectric here —
+            // this project's unit tests are plain JVM tests — so tell the
+            // stub to return defaults (0/false/null) instead.
+            returnDefaultValues = true
+        }
+    }
 }
 
 repositories {
@@ -32,11 +52,23 @@ repositories {
 
 dependencies {
     implementation fileTree(include: ['*.jar'], dir: 'libs')
+    // tsbridge.aar (built by scripts/build-tsbridge.sh from tsbridge/, NOT
+    // committed — see root .gitignore) lands here. Globbing *.aar rather
+    // than referencing it by exact name means the app builds fine with or
+    // without it present: TsBridge.kt binds to it reflectively at runtime,
+    // so its absence just makes tunnel mode unavailable, not a build
+    // failure. See TsBridge.kt's doc comment for the decoupling contract.
+    implementation fileTree(include: ['*.aar'], dir: 'libs')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    // Tunnel mode (TunnelManager/TsBridge/TunnelSetupActivity): Kotlin
+    // coroutines on Android's main-thread dispatcher, for the
+    // StateFlow<TunnelState> plumbing between TunnelManager and the UI.
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$kotlinxCoroutinesVersion"
     testImplementation "junit:junit:$junitVersion"
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$kotlinxCoroutinesVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')

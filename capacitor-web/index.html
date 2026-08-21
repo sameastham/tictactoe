@@ -142,12 +142,67 @@
     <main class="card">
       <div class="mark" aria-hidden="true">Ñ</div>
       <h1>Español Coach</h1>
-      <p class="status">No se pudo conectar al servidor.</p>
-      <ul class="hints">
+      <p class="status" id="status">No se pudo conectar al servidor.</p>
+      <ul class="hints" id="hints">
         <li>¿Está encendida la MacBook?</li>
         <li>¿Estás conectado a Tailscale?</li>
       </ul>
-      <button type="button" onclick="location.reload()">Reintentar</button>
+      <button type="button" id="retry-button" onclick="retry()">Reintentar</button>
     </main>
+    <script>
+      // This page doubles as two screens, distinguished by a ?state= query
+      // param the native side sets when it loads this page:
+      //
+      //   (no param, or state=offline) — the ORIGINAL behavior: Capacitor's
+      //     own server.url load failed (no tunnel involved, or tunnel mode
+      //     is off). Reintentar just reloads, re-attempting server.url.
+      //
+      //   state=connecting — shown by MainActivity while the embedded
+      //     Tailscale tunnel (TunnelManager) is bringing the node up.
+      //     Reintentar is hidden; there's nothing to retry yet.
+      //
+      //   state=error&message=... — the tunnel came up and failed (bad auth
+      //     key, hub unreachable, etc). `message` is shown verbatim below
+      //     the hints. Reintentar re-invokes TunnelManager.connect() via
+      //     the AndroidTunnel JS interface (see MainActivity.kt) rather
+      //     than a plain reload, which wouldn't restart the tsnet login
+      //     attempt on its own.
+      (function () {
+        var params = new URLSearchParams(location.search);
+        var state = params.get("state") || "offline";
+        var statusEl = document.getElementById("status");
+        var hintsEl = document.getElementById("hints");
+        var retryButton = document.getElementById("retry-button");
+
+        if (state === "connecting") {
+          statusEl.textContent = "Conectando por el túnel…";
+          hintsEl.style.display = "none";
+          retryButton.style.display = "none";
+        } else if (state === "error") {
+          var message = params.get("message");
+          statusEl.textContent = message
+            ? "No se pudo conectar por el túnel: " + message
+            : "No se pudo conectar por el túnel.";
+          hintsEl.innerHTML =
+            "<li>¿Es correcta la clave de autenticación?</li>" +
+            "<li>¿Es correcto el host:puerto del hub?</li>" +
+            "<li>Mantén presionada la pantalla para abrir los ajustes del túnel.</li>";
+        }
+        // else "offline": leave the original copy as-is.
+      })();
+
+      function retry() {
+        // Tunnel mode: AndroidTunnel is a JS interface MainActivity installs
+        // (addJavascriptInterface) only while tunnel mode is enabled — call
+        // it so Reintentar actually retriggers TunnelManager.connect().
+        // No-tunnel fallback (or a non-Android context): plain reload,
+        // which re-attempts the static server.url as it always has.
+        if (window.AndroidTunnel && typeof window.AndroidTunnel.retry === "function") {
+          window.AndroidTunnel.retry();
+        } else {
+          location.reload();
+        }
+      }
+    </script>
   </body>
 </html>

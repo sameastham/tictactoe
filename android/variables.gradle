@@ -1,5 +1,17 @@
 ext {
-    minSdkVersion = 24
+    // 26 (not 24) because tsbridge.aar (scripts/build-tsbridge.sh, -androidapi
+    // 26 — see that script's header) declares minSdkVersion 26 in its own
+    // manifest; the manifest merger hard-fails the whole app's build
+    // otherwise ("uses-sdk:minSdkVersion 24 cannot be smaller than version
+    // 26 declared in library [tsbridge.aar]"). The app still builds and runs
+    // fine with the .aar absent (see TsBridge.kt's reflective decoupling),
+    // but once it's present the app-wide floor has to match it — the
+    // alternative, tools:overrideLibrary, is explicitly documented by AAPT
+    // as "may lead to runtime failures" on the now-unsupported API levels,
+    // which isn't an acceptable trade for a feature that's supposed to be
+    // reliable. API 26 (Android 8.0, 2017) is a reasonable floor for a
+    // single-user personal tool.
+    minSdkVersion = 26
     compileSdkVersion = 36
     targetSdkVersion = 36
     androidxActivityVersion = '1.11.0'
@@ -13,4 +25,5 @@ ext {
     androidxJunitVersion = '1.3.0'
     androidxEspressoCoreVersion = '3.7.0'
     cordovaAndroidVersion = '14.0.1'
+    kotlinxCoroutinesVersion = '1.9.0'
 }

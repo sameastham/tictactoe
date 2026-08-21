@@ -25,6 +25,14 @@
 
         </activity>
 
+        <!-- Settings screen for the embedded-Tailscale tunnel (TunnelManager /
+             TsBridge). Internal only — reached from MainActivity's "Túnel"
+             long-press/menu affordance, never from an external Intent. -->
+        <activity
+            android:name=".TunnelSetupActivity"
+            android:label="Túnel"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
