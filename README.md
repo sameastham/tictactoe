@@ -2,6 +2,8 @@
 
 A personal Mexican-Spanish B2→C1 trainer: it captures chunks (words, collocations, idioms) from real content you consume, prompts you to produce them yourself, judges your output against a naturalness ladder, and keeps an append-only event log of everything so your progress is fully auditable over time.
 
+The app never crawls or generates content on its own — you always pick the specific piece and bring it in. If you're not sure what to read or listen to next, **Fuentes** (`/fuentes`) is a hand-curated directory of authentic Mexican sources (UNAM's cultural/academic outlets, SEP/gob.mx's institutional documents) you can browse and ingest straight from.
+
 ## Getting started
 
 ```bash

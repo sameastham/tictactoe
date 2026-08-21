@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { AddContentForm } from "@/components/AddContentForm";
+import { SourceDirectory } from "@/components/SourceDirectory";
 
-export default function AddPage() {
+export default function FuentesPage() {
   return (
     <div className="min-h-dvh px-4 pb-28 pt-6">
-      <header className="mb-6 flex items-center gap-3">
+      <header className="mb-2 flex items-center gap-3">
         <Link
           href="/"
           aria-label="Volver"
@@ -20,18 +20,14 @@ export default function AddPage() {
             />
           </svg>
         </Link>
-        <h1 className="text-xl font-bold tracking-tight">Agregar contenido</h1>
+        <h1 className="text-xl font-bold tracking-tight">Fuentes</h1>
       </header>
 
-      <AddContentForm />
+      <p className="mb-5 text-sm text-ink-muted">
+        Material auténtico sugerido — tú eliges la pieza, el app la trae.
+      </p>
 
-      <Link
-        href="/fuentes"
-        data-testid="link-to-fuentes"
-        className="mt-6 block text-center text-sm font-semibold text-accent"
-      >
-        ¿No sabes qué leer? Explora fuentes →
-      </Link>
+      <SourceDirectory />
     </div>
   );
 }

@@ -111,6 +111,9 @@ function EmptyState() {
       >
         Agregar contenido
       </Link>
+      <Link href="/fuentes" data-testid="link-to-fuentes" className="text-sm font-semibold text-accent">
+        ¿No sabes qué leer? Explora fuentes →
+      </Link>
     </div>
   );
 }

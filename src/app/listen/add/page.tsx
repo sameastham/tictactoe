@@ -24,6 +24,14 @@ export default function ListenAddPage() {
       </header>
 
       <UploadAudioForm />
+
+      <Link
+        href="/fuentes"
+        data-testid="link-to-fuentes"
+        className="mt-6 block text-center text-sm font-semibold text-accent"
+      >
+        ¿No sabes qué leer? Explora fuentes →
+      </Link>
     </div>
   );
 }
