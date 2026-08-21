@@ -1,0 +1,131 @@
+{
+  "difficulty": "B2",
+  "candidates": [
+    {
+      "id": "c1",
+      "chunk": "ha cobrado fuerza",
+      "origin_sentence": "A raíz de la ola de cafeterías que abrieron sus puertas primero en la Roma y la Condesa, y que después se replicaron en Guadalajara, Puebla y Oaxaca, el gusto por el café de origen ha cobrado fuerza entre un público cada vez más joven y cada vez más dispuesto a pagar setenta u ochenta pesos por una taza.",
+      "register": "neutral",
+      "why": "Marks a trend gaining momentum without saying ‘popular’; a learner would likely default to ‘se volvió popular’ instead of this collocation.",
+      "contrast_set": [
+        "cobrar fuerza",
+        "ganar terreno",
+        "tomar impulso"
+      ],
+      "taxonomy": [
+        "collocation"
+      ]
+    },
+    {
+      "id": "c2",
+      "chunk": "hacer frente a",
+      "origin_sentence": "Los caficultores de Chiapas, Veracruz y Oaxaca han tenido que hacer frente a plagas como la roya, a la volatilidad del precio internacional y, en la medida en que el cambio climático altera los ciclos de lluvia, a cosechas cada vez más impredecibles.",
+      "register": "neutral",
+      "why": "Standard collocation for confronting a problem; learners often drop the preposition and just say ‘enfrentar’, losing the more natural phrasing.",
+      "contrast_set": [
+        "hacer frente a",
+        "afrontar",
+        "encarar"
+      ],
+      "taxonomy": [
+        "collocation",
+        "preposition"
+      ]
+    },
+    {
+      "id": "c3",
+      "chunk": "en la medida en que",
+      "origin_sentence": "Los caficultores de Chiapas, Veracruz y Oaxaca han tenido que hacer frente a plagas como la roya, a la volatilidad del precio internacional y, en la medida en que el cambio climático altera los ciclos de lluvia, a cosechas cada vez más impredecibles.",
+      "register": "neutral",
+      "why": "Graduated causal/conditional connector (‘to the extent that’); learners tend to flatten this into ‘cuando’, losing the proportional nuance.",
+      "contrast_set": null,
+      "taxonomy": [
+        "discourse"
+      ]
+    },
+    {
+      "id": "c4",
+      "chunk": "De por sí",
+      "origin_sentence": "De por sí cultivar café de altura es un trabajo lento —una planta tarda años en dar su primer fruto—, y las heladas o las sequías fuera de temporada pueden echar por tierra el esfuerzo de toda una temporada.",
+      "register": "neutral",
+      "why": "Idiomatic intensifier meaning ‘in itself, even so’; hard to produce because there’s no literal English phrase to translate from.",
+      "contrast_set": null,
+      "taxonomy": [
+        "idiomaticity"
+      ]
+    },
+    {
+      "id": "c5",
+      "chunk": "Por si fuera poco",
+      "origin_sentence": "Por si fuera poco, buena parte de esos productores nunca ha probado el café que exporta, preparado como espresso o como método filtrado en una cafetería de la ciudad.",
+      "register": "neutral",
+      "why": "Rhetorical escalation marker (‘as if that weren’t enough’); learners tend to just bolt on another ‘y’ clause instead.",
+      "contrast_set": null,
+      "taxonomy": [
+        "discourse"
+      ]
+    },
+    {
+      "id": "c6",
+      "chunk": "de plano",
+      "origin_sentence": "En la capital, mientras tanto, la demanda ha crecido tan rápido que varias cafeterías reconocen, sin mucho rodeo, que de plano no dan abasto los fines de semana.",
+      "register": "coloquial_mx",
+      "why": "Mexican colloquial intensifier for ‘flat out, just plain’; learners default to the flatter ‘simplemente’.",
+      "contrast_set": null,
+      "taxonomy": [
+        "register"
+      ]
+    },
+    {
+      "id": "c7",
+      "chunk": "no dan abasto",
+      "origin_sentence": "En la capital, mientras tanto, la demanda ha crecido tan rápido que varias cafeterías reconocen, sin mucho rodeo, que de plano no dan abasto los fines de semana.",
+      "register": "neutral",
+      "why": "Idiomatic collocation for being overwhelmed by demand; a learner would likely produce the clunkier ‘no pueden con la demanda’.",
+      "contrast_set": null,
+      "taxonomy": [
+        "collocation",
+        "idiomaticity"
+      ]
+    },
+    {
+      "id": "c8",
+      "chunk": "ponga en marcha",
+      "origin_sentence": "Se hacen filas de media hora para conseguir mesa, y no es raro que un local ponga en marcha un sistema de reservaciones solo para ordenar un poco el caos de la hora pico.",
+      "register": "neutral",
+      "why": "Everyday collocation for launching a plan or system, here subjunctive-triggered; learners often reach for the more literal ‘empezar’.",
+      "contrast_set": [
+        "poner en marcha",
+        "echar a andar",
+        "arrancar"
+      ],
+      "taxonomy": [
+        "collocation",
+        "grammar"
+      ]
+    },
+    {
+      "id": "c9",
+      "chunk": "Ahorita mismo",
+      "origin_sentence": "Ahorita mismo, en algunas colonias, abrir una cafetería de especialidad se ha vuelto casi tan común como abrir una taquería, y eso ha encendido cierto debate sobre la gentrificación: los mismos vecinos que celebran la nueva oferta gastronómica se quejan, con razón, de que las rentas suben junto con el precio del café.",
+      "register": "coloquial_mx",
+      "why": "Quintessential Mexican time marker for ‘right now’; learners typically only know the neutral ‘ahora’.",
+      "contrast_set": null,
+      "taxonomy": [
+        "register"
+      ]
+    },
+    {
+      "id": "c10",
+      "chunk": "Ni modo",
+      "origin_sentence": "Ni modo: mientras eso no sea la norma y siga siendo la excepción, seguiremos hablando de un boom que beneficia sobre todo a las ciudades y muy poco al campo.",
+      "register": "coloquial_mx",
+      "why": "Fixed Mexican colloquialism of resigned acceptance; there’s no compositional way for a learner to build this from its parts.",
+      "contrast_set": null,
+      "taxonomy": [
+        "idiomaticity",
+        "register"
+      ]
+    }
+  ]
+}
