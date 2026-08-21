@@ -3,15 +3,21 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Mode = "url" | "texto";
+type Mode = "url" | "texto" | "pdf";
 
 /** Best-effort message for a failed POST /api/content, matching the API's documented error shapes. */
-async function readErrorMessage(res: Response): Promise<string> {
+async function readErrorMessage(res: Response, mode: Mode): Promise<string> {
   const body = await res.json().catch(() => null);
   const error = body && typeof body === "object" ? (body as Record<string, unknown>).error : undefined;
 
   if (res.status === 422) {
+    if (mode === "pdf") {
+      return "Ese PDF no tiene texto extraíble — puede ser un escaneo.";
+    }
     return "No se pudo extraer un artículo legible de esa URL.";
+  }
+  if (res.status === 413) {
+    return "Ese PDF pesa demasiado (máx. 20 MB).";
   }
   if (res.status === 400) {
     return "Revisa los datos e intenta de nuevo.";
@@ -28,6 +34,7 @@ export function AddContentForm() {
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
   const [text, setText] = useState("");
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,21 +47,33 @@ export function AddContentForm() {
       setError("El texto debe tener al menos 40 caracteres.");
       return;
     }
-
-    const body =
-      mode === "url"
-        ? { url: url.trim() }
-        : { text: text.trim(), ...(title.trim() ? { title: title.trim() } : {}) };
+    if (mode === "pdf" && !pdfFile) {
+      setError("Selecciona un archivo PDF.");
+      return;
+    }
 
     setPending(true);
     try {
-      const res = await fetch("/api/content", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      let res: Response;
+      if (mode === "pdf") {
+        const formData = new FormData();
+        formData.set("file", pdfFile!);
+        if (title.trim()) formData.set("title", title.trim());
+        res = await fetch("/api/content", { method: "POST", body: formData });
+      } else {
+        const body =
+          mode === "url"
+            ? { url: url.trim() }
+            : { text: text.trim(), ...(title.trim() ? { title: title.trim() } : {}) };
+        res = await fetch("/api/content", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      }
+
       if (!res.ok) {
-        setError(await readErrorMessage(res));
+        setError(await readErrorMessage(res, mode));
         setPending(false);
         return;
       }
@@ -68,16 +87,19 @@ export function AddContentForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-1 rounded-full bg-paper-elevated p-1 border border-line">
+      <div className="grid grid-cols-3 gap-1 rounded-full bg-paper-elevated p-1 border border-line">
         <SegmentButton active={mode === "url"} onClick={() => setMode("url")}>
           URL
         </SegmentButton>
         <SegmentButton active={mode === "texto"} onClick={() => setMode("texto")}>
           Texto
         </SegmentButton>
+        <SegmentButton active={mode === "pdf"} onClick={() => setMode("pdf")}>
+          PDF
+        </SegmentButton>
       </div>
 
-      {mode === "url" ? (
+      {mode === "url" && (
         <div className="flex flex-col gap-1.5">
           <label htmlFor="url" className="text-sm font-medium text-ink">
             Dirección del artículo
@@ -94,9 +116,11 @@ export function AddContentForm() {
             onChange={(e) => setUrl(e.target.value)}
             className="h-12 rounded-xl border border-line bg-paper-elevated px-4 text-base text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
           />
-          <p className="text-xs text-ink-muted">Se extraerá el artículo de la página.</p>
+          <p className="text-xs text-ink-muted">Página o PDF.</p>
         </div>
-      ) : (
+      )}
+
+      {mode === "texto" && (
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="title" className="text-sm font-medium text-ink">
@@ -130,6 +154,39 @@ export function AddContentForm() {
         </div>
       )}
 
+      {mode === "pdf" && (
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="pdf-title" className="text-sm font-medium text-ink">
+              Título <span className="text-ink-muted">(opcional)</span>
+            </label>
+            <input
+              id="pdf-title"
+              name="pdf-title"
+              type="text"
+              placeholder="Título del documento"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="h-12 rounded-xl border border-line bg-paper-elevated px-4 text-base text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="pdf-file" className="text-sm font-medium text-ink">
+              Archivo PDF
+            </label>
+            <input
+              id="pdf-file"
+              name="pdf-file"
+              type="file"
+              accept="application/pdf"
+              onChange={(e) => setPdfFile(e.target.files?.[0] ?? null)}
+              className="rounded-xl border border-line bg-paper-elevated px-4 py-3 text-base text-ink outline-none file:mr-3 file:rounded-full file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-accent-fg focus:border-accent focus:ring-2 focus:ring-accent/25"
+            />
+            <p className="text-xs text-ink-muted">Se extraerá el texto del PDF.</p>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="rounded-xl border border-danger-border bg-danger-bg px-4 py-3 text-sm text-danger-fg">
           {error}
@@ -144,7 +201,7 @@ export function AddContentForm() {
         {pending && (
           <span className="h-4 w-4 animate-spin rounded-full border-2 border-accent-fg/40 border-t-accent-fg" />
         )}
-        {pending ? "Agregando…" : "Agregar contenido"}
+        {pending ? (mode === "pdf" ? "Extrayendo texto…" : "Agregando…") : "Agregar contenido"}
       </button>
     </form>
   );
