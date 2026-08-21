@@ -190,7 +190,10 @@ export function ReadClient({ contentId, title, text, initialExtraction, initialD
           <ChevronLeftIcon />
         </button>
         <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{title ?? "Artículo"}</h1>
-        <span className="mr-1 shrink-0 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent-strong">
+        <span
+          data-testid="decision-counter"
+          className="mr-1 shrink-0 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent-strong"
+        >
           {allDecided ? "¡Listo!" : `${decidedCount}/${total}`}
         </span>
       </header>
@@ -206,6 +209,9 @@ export function ReadClient({ contentId, title, text, initialExtraction, initialD
                   <button
                     key={j}
                     type="button"
+                    data-testid="candidate-mark"
+                    data-state={decisions[seg.candidateId] ?? "undecided"}
+                    data-candidate-id={seg.candidateId}
                     className={markClasses(decisions[seg.candidateId])}
                     onClick={() => setActiveCandidateId(seg.candidateId)}
                   >

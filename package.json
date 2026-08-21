@@ -11,7 +11,8 @@
     "db:migrate": "drizzle-kit migrate",
     "seed": "tsx scripts/seed.ts",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "next build && playwright test",
+    "e2e:only": "playwright test"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",

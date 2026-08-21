@@ -41,6 +41,8 @@ export function CandidateSheet({ candidate, decision, onClose, onDecide }: Candi
 
       <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center">
         <div
+          data-testid="candidate-sheet"
+          data-candidate-id={candidate.id}
           className="sheet-panel pointer-events-auto flex max-h-[85dvh] w-full max-w-md flex-col overflow-y-auto rounded-t-3xl border-t border-line bg-paper-elevated px-5 pt-2.5 shadow-2xl"
           style={{ paddingBottom: "calc(1.5rem + env(safe-area-inset-bottom))" }}
           role="dialog"
@@ -52,6 +54,7 @@ export function CandidateSheet({ candidate, decision, onClose, onDecide }: Candi
 
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <span
+              data-testid="candidate-register"
               className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${REGISTER_CHIP_CLASSES[candidate.register]}`}
             >
               {REGISTER_LABELS[candidate.register]}
@@ -72,7 +75,9 @@ export function CandidateSheet({ candidate, decision, onClose, onDecide }: Candi
             <OriginSentence sentence={candidate.origin_sentence} chunk={candidate.chunk} />
           </p>
 
-          <p className="mt-4 text-sm leading-relaxed text-ink">{candidate.why}</p>
+          <p data-testid="candidate-why" className="mt-4 text-sm leading-relaxed text-ink">
+            {candidate.why}
+          </p>
 
           {candidate.contrast_set && candidate.contrast_set.length > 0 && (
             <div className="mt-4">

@@ -21,8 +21,9 @@ FSRS review scheduler, and the eval harness over `gold_set`. Don't assume any of
 - `npm run typecheck` — `tsc --noEmit`.
 - `npm run lint` — `eslint .`.
 - `npm test` — `vitest run`, tests live at `src/**/*.test.ts`.
-- `npm run e2e` — `playwright test` (no `playwright.config.ts` or e2e spec directory exists yet —
-  the script is a placeholder).
+- `npm run e2e` — `next build && playwright test`: rebuilds the production bundle, then runs the
+  Playwright suite (`e2e/`) against it, so the command is self-contained. `npm run e2e:only` skips
+  the rebuild and just runs `playwright test` against whatever build is already on disk.
 - `npm run db:generate` — `drizzle-kit generate`, writes a new migration from `src/db/schema.ts`.
 - `npm run db:migrate` — `drizzle-kit migrate`, applies migrations to `DB_PATH` (default
   `data/app.db`).
@@ -138,8 +139,14 @@ passed to every model call via `renderPrompt`, which substitutes `{{LEARNER_BLOC
   — there is no `tailwind.config.*` file to edit.
 - Tests: `vitest run`, files matched by `src/**/*.test.ts` (see `vitest.config.ts`); path alias
   `@/*` → `src/*` in both vitest and `tsconfig.json`.
-- E2E: Playwright, browsers expected at `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`. Not yet
-  wired up in this repo (see §2) — set this up before writing the first e2e spec.
+- E2E: Playwright, config at `playwright.config.ts`, specs in `e2e/`. Single chromium project
+  (`devices["Pixel 7"]`), `workers: 1` and `fullyParallel: false` — every spec shares one
+  throwaway sqlite DB (`.tmp/e2e.db`) so tests must run serially, never in parallel.
+  `globalSetup` (`e2e/global-setup.ts`) deletes and re-seeds that DB before each run, so
+  `npm run e2e` is repeatable from a clean state every time. The `webServer` runs a real
+  production server (`npm start -- -p 3111`) with `MODEL_PROVIDER=fixture` (no network/API key
+  needed) and `DB_PATH=.tmp/e2e.db`. Browsers expected at
+  `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`.
 - `legacy/` is an unrelated prior tic-tac-toe project kept for reference only; it's excluded from
   `tsconfig.json` and `eslint.config.mjs`. Don't touch it, don't treat it as part of this app.
 
