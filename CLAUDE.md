@@ -26,8 +26,8 @@ FSRS review scheduler, and the eval harness over `gold_set`. Don't assume any of
 - `npm run db:generate` — `drizzle-kit generate`, writes a new migration from `src/db/schema.ts`.
 - `npm run db:migrate` — `drizzle-kit migrate`, applies migrations to `DB_PATH` (default
   `data/app.db`).
-- `npm run seed` — `tsx scripts/seed.ts` (this file does not exist yet — the script will fail
-  until it's written).
+- `npm run seed` — `tsx scripts/seed.ts`: applies migrations, then idempotently inserts the
+  fixture article as a first content row.
 
 `MODEL_PROVIDER=fixture` forces the deterministic, no-network `FixtureProvider`. With
 `MODEL_PROVIDER` unset and no `ANTHROPIC_API_KEY`, fixture is the automatic default (see
@@ -144,3 +144,13 @@ passed to every model call via `renderPrompt`, which substitutes `{{LEARNER_BLOC
 When generating a large file, write the skeleton first with Write, then extend it with Edit calls,
 rather than emitting the whole thing in one Write — long single writes are more prone to silent
 truncation.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

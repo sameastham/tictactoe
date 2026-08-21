@@ -28,7 +28,7 @@ export interface LanguageService {
     input: ExtractInput,
     learner: LearnerBlock,
     opts?: { contentId?: string },
-  ): Promise<ExtractResult>;
+  ): Promise<{ result: ExtractResult; model: string }>;
   judge(input: JudgeInput, learner: LearnerBlock): Promise<JudgeResult>;
   converse(input: ConverseInput, learner: LearnerBlock): Promise<ConverseResult>;
 }
@@ -108,7 +108,7 @@ export function createLanguageService(deps: { db: Db; provider: ModelProvider })
     input: ExtractInput,
     learner: LearnerBlock,
     opts?: { contentId?: string },
-  ): Promise<ExtractResult> {
+  ): Promise<{ result: ExtractResult; model: string }> {
     const prompt = renderPrompt(loadPrompt("extract", EXTRACT_PROMPT_VERSION).text, learner);
     const userMessage = input.title ? `# ${input.title}\n\n${input.text}` : input.text;
 
@@ -145,7 +145,7 @@ export function createLanguageService(deps: { db: Db; provider: ModelProvider })
     }
 
     recordExtractCall({ ok: true, response, durationMs, contentId: opts?.contentId });
-    return cleaned;
+    return { result: cleaned, model: response.model };
   }
 
   async function judge(_input: JudgeInput, _learner: LearnerBlock): Promise<JudgeResult> {

@@ -29,8 +29,9 @@ describe("LanguageService.extract — with FixtureProvider", () => {
     const service = createLanguageService({ db, provider: new FixtureProvider() });
     const input: ExtractInput = { title: null, text: articleText };
 
-    const result = await service.extract(input, makeLearner());
+    const { result, model } = await service.extract(input, makeLearner());
 
+    expect(model).toBe("fixture");
     expect(result.candidates).toHaveLength(10);
     expect(result.candidates.map((c) => c.id)).toEqual(Array.from({ length: 10 }, (_, i) => `c${i + 1}`));
 
@@ -92,8 +93,9 @@ describe("LanguageService.extract — post-validation", () => {
     const service = createLanguageService({ db, provider: makeGoodBadProvider() });
     const input: ExtractInput = { title: null, text: inputText };
 
-    const result = await service.extract(input, makeLearner());
+    const { result, model } = await service.extract(input, makeLearner());
 
+    expect(model).toBe("stub-model");
     expect(result.candidates).toHaveLength(1);
     expect(result.candidates[0].id).toBe("c1");
     expect(result.candidates[0].chunk).toBe("buena frase");
