@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { createTestDb, type Db } from "@/db";
 import { events, items, sessions, writings } from "@/db/schema";
 import { newId } from "@/lib/ids";
-import type { Candidate, ProducedErrorPayload } from "@/lib/contracts";
+import type { Candidate, FluencyMetrics, ProducedErrorPayload, TalkTurnMeta } from "@/lib/contracts";
 import { createContent, getSession, recordDecision } from "@/server/repo";
 import { createLanguageService } from "@/server/language/service";
 import { FixtureProvider } from "@/server/language/providers/fixture";
@@ -61,6 +61,22 @@ function seedDueItem(db: Db, overrides: Partial<Candidate> = {}) {
     promptVersion: "v1",
   });
   return { itemId: itemId!, chunk: candidate.chunk };
+}
+
+function makeFluency(overrides: Partial<FluencyMetrics> = {}): FluencyMetrics {
+  return {
+    durationMs: 4000,
+    wordCount: 10,
+    wordsPerMin: 150,
+    pausesOver800Ms: 1,
+    longestPauseMs: 900,
+    fillerCount: 2,
+    ...overrides,
+  };
+}
+
+function makeVoiceMeta(overrides: Partial<FluencyMetrics> = {}): TalkTurnMeta {
+  return { kind: "voice", fluency: makeFluency(overrides) };
 }
 
 describe("seedTopic", () => {
@@ -204,6 +220,7 @@ describe("endTalk", () => {
     expect(report.itemsUsed).toEqual([]);
     expect(report.itemsAvoided).toEqual([]);
     expect(report.practiceNext).toEqual([]);
+    expect(report.fluency).toBeNull();
 
     const session = getSession(db, sessionId);
     expect(session?.endedAt).toBeInstanceOf(Date);
@@ -320,5 +337,94 @@ describe("getTalkReport", () => {
     const rederived = getTalkReport(db, sessionId);
 
     expect(rederived).toEqual(endedReport);
+  });
+});
+
+describe("recordLearnerTurn meta (voice mode)", () => {
+  it("persists null meta by default (a typed turn)", async () => {
+    const { sessionId } = await startTalk(db, languageService());
+    const turn = recordLearnerTurn(db, sessionId, "Un mensaje escrito.");
+    expect(turn.meta).toBeNull();
+  });
+
+  it("persists the passed voice meta on the learner turn", async () => {
+    const { sessionId } = await startTalk(db, languageService());
+    const meta = makeVoiceMeta({ wordsPerMin: 180, pausesOver800Ms: 2, fillerCount: 3 });
+    const turn = recordLearnerTurn(db, sessionId, "Hablé esto en voz alta.", meta);
+
+    expect(turn.meta).toEqual(meta);
+    const stored = getTalkTurns(db, sessionId).find((t) => t.id === turn.id);
+    expect(stored?.meta).toEqual(meta);
+  });
+
+  it("never sets meta on a tutor turn (recordTutorTurn takes no meta argument)", async () => {
+    const { sessionId } = await startTalk(db, languageService());
+    const turn = recordTutorTurn(db, sessionId, "Órale, cuéntame más.");
+    expect(turn.meta).toBeNull();
+  });
+});
+
+describe("fluency aggregation (endTalk / getTalkReport)", () => {
+  it("is null when the session has no voice-mode learner turns", async () => {
+    const { sessionId } = await startTalk(db, languageService());
+    recordLearnerTurn(db, sessionId, "Un mensaje escrito, sin voz.");
+
+    const report = await endTalk(db, sessionId, languageService());
+    expect(report.fluency).toBeNull();
+  });
+
+  it("aggregates a single voice turn's fluency into the report", async () => {
+    const { sessionId } = await startTalk(db, languageService());
+    const meta = makeVoiceMeta({ wordsPerMin: 140, pausesOver800Ms: 2, fillerCount: 3 });
+    recordLearnerTurn(db, sessionId, "Para mí eso no hacer sentido, pero está interesante.", meta);
+
+    const report = await endTalk(db, sessionId, languageService());
+    expect(report.fluency).toEqual({
+      voiceTurns: 1,
+      avgWordsPerMin: 140,
+      totalPausesOver800Ms: 2,
+      totalFillers: 3,
+    });
+  });
+
+  it("averages wordsPerMin and sums pauses/fillers across multiple voice turns, ignoring typed turns", async () => {
+    const { sessionId } = await startTalk(db, languageService());
+    recordLearnerTurn(db, sessionId, "Un turno escrito que no cuenta para la fluidez.");
+    recordLearnerTurn(
+      db,
+      sessionId,
+      "Primer turno de voz.",
+      makeVoiceMeta({ wordsPerMin: 100, pausesOver800Ms: 1, fillerCount: 2 }),
+    );
+    recordLearnerTurn(
+      db,
+      sessionId,
+      "Segundo turno de voz.",
+      makeVoiceMeta({ wordsPerMin: 160, pausesOver800Ms: 3, fillerCount: 4 }),
+    );
+
+    const report = await endTalk(db, sessionId, languageService());
+    expect(report.fluency).toEqual({
+      voiceTurns: 2,
+      avgWordsPerMin: 130, // (100 + 160) / 2
+      totalPausesOver800Ms: 4, // 1 + 3
+      totalFillers: 6, // 2 + 4
+    });
+  });
+
+  it("re-derives the same non-null fluency via getTalkReport, without recomputing anything", async () => {
+    const { sessionId } = await startTalk(db, languageService());
+    recordLearnerTurn(
+      db,
+      sessionId,
+      "Para mí eso no hacer sentido, pero está interesante.",
+      makeVoiceMeta({ wordsPerMin: 120 }),
+    );
+
+    const endedReport = await endTalk(db, sessionId, languageService());
+    expect(endedReport.fluency).not.toBeNull();
+
+    const rederived = getTalkReport(db, sessionId);
+    expect(rederived.fluency).toEqual(endedReport.fluency);
   });
 });

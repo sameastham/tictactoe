@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { JudgeIssue, JudgedSentence, TalkReport } from "@/lib/contracts";
+import type { JudgeIssue, JudgedSentence, TalkReport, TalkTurnMeta } from "@/lib/contracts";
 import { RUNG_CHIP_CLASSES, RUNG_EDGE_CLASSES, RUNG_LABELS, SEVERITY_LABELS, TAXONOMY_LABELS } from "@/lib/labels";
+import { formatElapsed, useVoiceRecorder } from "@/components/VoiceRecorder";
+import { getBrowserTts } from "@/lib/tts";
 
 export interface TalkTurnDto {
   role: "learner" | "tutor";
@@ -35,6 +37,55 @@ function SendIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
       <path d="M4 12l16-8-6 8 6 8-16-8Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function MicIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+      <path
+        d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M6 11a6 6 0 0 0 12 0M12 19v2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function SpeakerIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
+      <path
+        d="M4 9.5v5h3.2L12 18V6L7.2 9.5H4Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path d="M15.5 9a3.5 3.5 0 0 1 0 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SpeakerOffIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4" aria-hidden="true">
+      <path
+        d="M4 9.5v5h3.2L12 18V6L7.2 9.5H4Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinejoin="round"
+      />
+      <path d="M15.5 10.2l3.5 3.6M19 10.2l-3.5 3.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }
@@ -107,6 +158,58 @@ export function TalkClient({
   const [showTranscript, setShowTranscript] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Voice mode (plan §4.3 week 7): a transcribed recording lands in `text`,
+  // editable, with its fluency meta stashed here until the learner actually
+  // sends it — see `handleTranscribed`/`sendMessage`/`handleMicTap` below.
+  const [voiceMeta, setVoiceMeta] = useState<TalkTurnMeta | null>(null);
+  const [speakingIndex, setSpeakingIndex] = useState<number | null>(null);
+  const tts = useMemo(() => getBrowserTts(), []);
+
+  function handleTranscribed(transcribedText: string, meta: TalkTurnMeta) {
+    setText(transcribedText);
+    setVoiceMeta(meta);
+  }
+  const recorder = useVoiceRecorder(handleTranscribed);
+
+  function handleMicTap() {
+    // Starting a new recording drops whatever was previously stashed — it
+    // describes an attempt the learner is now discarding in favor of a new one.
+    setVoiceMeta(null);
+    recorder.start();
+  }
+
+  function handleTextChange(value: string) {
+    setText(value);
+    if (value.length === 0) {
+      // Manually clearing the input drops the stashed meta (design §5) —
+      // editing it otherwise keeps it, since it still describes the spoken attempt.
+      setVoiceMeta(null);
+    }
+  }
+
+  function handleToggleSpeak(index: number, turnText: string) {
+    if (speakingIndex === index) {
+      tts.stop();
+      setSpeakingIndex(null);
+      return;
+    }
+    tts.stop();
+    tts.speak(turnText);
+    setSpeakingIndex(index);
+  }
+
+  // Cosmetic only: resets the speaker icon back to "play" once the browser
+  // finishes an utterance on its own (no `onend` on the `TtsEngine`
+  // interface by design — this reads `speechSynthesis.speaking` directly,
+  // never controls it).
+  useEffect(() => {
+    if (speakingIndex === null || typeof window === "undefined" || !window.speechSynthesis) return;
+    const interval = setInterval(() => {
+      if (!window.speechSynthesis.speaking) setSpeakingIndex(null);
+    }, 250);
+    return () => clearInterval(interval);
+  }, [speakingIndex]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turns.length, pending]);
@@ -145,7 +248,12 @@ export function TalkClient({
   async function sendMessage() {
     const trimmed = text.trim();
     if (!trimmed || pending || ended) return;
+    // The stashed meta describes this exact text (edited or not) — captured
+    // before clearing state below, and sent whether or not this turn's
+    // text still matches the raw transcript verbatim.
+    const meta = voiceMeta;
     setText("");
+    setVoiceMeta(null);
     setSendError(null);
     setTurns((prev) => [...prev, { role: "learner", text: trimmed, createdAt: new Date().toISOString() }]);
     setPending(true);
@@ -153,7 +261,7 @@ export function TalkClient({
       const res = await fetch("/api/talk/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, text: trimmed }),
+        body: JSON.stringify({ sessionId, text: trimmed, ...(meta ? { meta } : {}) }),
       });
       if (!res.ok) {
         setSendError("No se pudo enviar tu mensaje. Intenta de nuevo.");
@@ -247,13 +355,23 @@ export function TalkClient({
           chunksById={chunksById}
           showTranscript={showTranscript}
           onToggleTranscript={() => setShowTranscript((v) => !v)}
+          ttsAvailable={tts.available}
+          speakingIndex={speakingIndex}
+          onToggleSpeak={handleToggleSpeak}
         />
       ) : (
         <>
           <main className="flex-1 overflow-y-auto px-3 py-4" data-testid="talk-transcript">
             <div className="flex flex-col gap-3">
               {turns.map((turn, i) => (
-                <Bubble key={i} turn={turn} />
+                <Bubble
+                  key={i}
+                  turn={turn}
+                  index={i}
+                  ttsAvailable={tts.available}
+                  speaking={speakingIndex === i}
+                  onToggleSpeak={handleToggleSpeak}
+                />
               ))}
               {pending && <TypingBubble />}
               <div ref={bottomRef} />
@@ -266,28 +384,58 @@ export function TalkClient({
           >
             {sendError && <p className="mb-2 text-sm text-danger-fg">{sendError}</p>}
             {endError && <p className="mb-2 text-sm text-danger-fg">{endError}</p>}
-            <div className="flex items-end gap-2">
-              <textarea
-                data-testid="talk-input"
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                rows={textareaRows(text)}
-                placeholder="Escribe en español…"
-                disabled={pending}
-                className="min-h-11 flex-1 resize-none rounded-2xl border border-line bg-paper-elevated px-4 py-2.5 text-base leading-relaxed text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25 disabled:opacity-60"
-              />
-              <button
-                type="button"
-                data-testid="talk-send"
-                onClick={sendMessage}
-                disabled={pending || text.trim().length === 0}
-                aria-label="Enviar"
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg active:opacity-90 disabled:opacity-60"
+
+            {recorder.status === "recording" ? (
+              <RecordingBar elapsedMs={recorder.elapsedMs} onStop={recorder.stop} onCancel={recorder.cancel} />
+            ) : recorder.status === "transcribing" ? (
+              <div
+                data-testid="voice-transcribing"
+                className="flex h-11 items-center gap-3 rounded-2xl border border-line bg-paper-elevated px-4 text-sm text-ink-muted"
               >
-                <SendIcon />
-              </button>
-            </div>
+                <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-accent/40 border-t-accent" />
+                Transcribiendo…
+              </div>
+            ) : (
+              <>
+                {recorder.status === "error" && recorder.errorMessage && (
+                  <p className="mb-2 text-sm text-danger-fg" data-testid="voice-error">
+                    {recorder.errorMessage}
+                  </p>
+                )}
+                <div className="flex items-end gap-2">
+                  <textarea
+                    data-testid="talk-input"
+                    value={text}
+                    onChange={(e) => handleTextChange(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    rows={textareaRows(text)}
+                    placeholder="Escribe en español…"
+                    disabled={pending}
+                    className="min-h-11 flex-1 resize-none rounded-2xl border border-line bg-paper-elevated px-4 py-2.5 text-base leading-relaxed text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25 disabled:opacity-60"
+                  />
+                  <button
+                    type="button"
+                    data-testid="voice-mic-button"
+                    onClick={handleMicTap}
+                    disabled={pending || recorder.status === "requesting"}
+                    aria-label="Grabar en voz alta"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line text-ink active:bg-line/30 disabled:opacity-60"
+                  >
+                    <MicIcon />
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="talk-send"
+                    onClick={sendMessage}
+                    disabled={pending || text.trim().length === 0}
+                    aria-label="Enviar"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg active:opacity-90 disabled:opacity-60"
+                  >
+                    <SendIcon />
+                  </button>
+                </div>
+              </>
+            )}
           </footer>
         </>
       )}
@@ -295,11 +443,27 @@ export function TalkClient({
   );
 }
 
-function Bubble({ turn }: { turn: TalkTurnDto }) {
+function Bubble({
+  turn,
+  index,
+  ttsAvailable,
+  speaking,
+  onToggleSpeak,
+}: {
+  turn: TalkTurnDto;
+  /** This turn's position within `turns` — required (with the three props below) to show a TTS button. */
+  index?: number;
+  /** `getBrowserTts().available` — no es-* voice means no button, ever. */
+  ttsAvailable?: boolean;
+  speaking?: boolean;
+  onToggleSpeak?: (index: number, text: string) => void;
+}) {
   const isTutor = turn.role === "tutor";
+  const showTts = isTutor && ttsAvailable && index !== undefined && onToggleSpeak !== undefined;
+
   return (
     <div
-      className={isTutor ? "flex justify-start" : "flex justify-end"}
+      className={isTutor ? "flex items-end justify-start gap-1.5" : "flex justify-end"}
       data-testid="talk-bubble"
       data-role={turn.role}
     >
@@ -312,6 +476,56 @@ function Bubble({ turn }: { turn: TalkTurnDto }) {
       >
         {turn.text}
       </div>
+      {showTts && (
+        <button
+          type="button"
+          data-testid="talk-tts-button"
+          aria-label={speaking ? "Detener lectura" : "Escuchar"}
+          onClick={() => onToggleSpeak(index, turn.text)}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-muted active:bg-line/40"
+        >
+          {speaking ? <SpeakerOffIcon /> : <SpeakerIcon />}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Replaces the input row while a voice recording is in progress — pulsing dot, elapsed timer, Detener/Cancelar. */
+function RecordingBar({
+  elapsedMs,
+  onStop,
+  onCancel,
+}: {
+  elapsedMs: number;
+  onStop: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      data-testid="voice-recording-bar"
+      className="flex h-11 items-center gap-3 rounded-2xl border border-danger-border bg-danger-bg px-4"
+    >
+      <span className="h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-danger-border" aria-hidden="true" />
+      <span data-testid="voice-timer" className="flex-1 text-sm font-medium tabular-nums text-danger-fg">
+        {formatElapsed(elapsedMs)}
+      </span>
+      <button
+        type="button"
+        data-testid="voice-cancel"
+        onClick={onCancel}
+        className="rounded-full px-3 py-1.5 text-sm font-semibold text-danger-fg active:bg-danger-border/20"
+      >
+        Cancelar
+      </button>
+      <button
+        type="button"
+        data-testid="voice-stop"
+        onClick={onStop}
+        className="rounded-full bg-danger-border px-3 py-1.5 text-sm font-semibold text-white active:opacity-90"
+      >
+        Detener
+      </button>
     </div>
   );
 }
@@ -335,6 +549,9 @@ function ReportView({
   chunksById,
   showTranscript,
   onToggleTranscript,
+  ttsAvailable,
+  speakingIndex,
+  onToggleSpeak,
 }: {
   report: TalkReport | null;
   topic: string | null;
@@ -342,6 +559,9 @@ function ReportView({
   chunksById: Record<string, string>;
   showTranscript: boolean;
   onToggleTranscript: () => void;
+  ttsAvailable: boolean;
+  speakingIndex: number | null;
+  onToggleSpeak: (index: number, text: string) => void;
 }) {
   const learnerTurnCount = turns.filter((t) => t.role === "learner").length;
 
@@ -353,6 +573,8 @@ function ReportView({
           {topic}
         </p>
       )}
+
+      {report?.fluency && <FluencySection fluency={report.fluency} />}
 
       {!report || !report.judgment ? (
         <p className="text-sm text-ink-muted" data-testid="talk-report-unjudged">
@@ -401,11 +623,59 @@ function ReportView({
       {showTranscript && (
         <div className="mt-3 flex flex-col gap-2" data-testid="talk-transcript-review">
           {turns.map((turn, i) => (
-            <Bubble key={i} turn={turn} />
+            <Bubble
+              key={i}
+              turn={turn}
+              index={i}
+              ttsAvailable={ttsAvailable}
+              speaking={speakingIndex === i}
+              onToggleSpeak={onToggleSpeak}
+            />
           ))}
         </div>
       )}
     </main>
+  );
+}
+
+/**
+ * "Fluidez" — plain stats read off the session's voice-mode learner turns
+ * (see `FluencyAggregateSchema`), no naturalness judgment attached. Only
+ * rendered when the session had at least one voice turn.
+ */
+function FluencySection({ fluency }: { fluency: NonNullable<TalkReport["fluency"]> }) {
+  return (
+    <section
+      className="mb-5 rounded-xl border border-line bg-paper-elevated px-4 py-3.5"
+      data-testid="talk-fluency"
+    >
+      <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">Fluidez</h2>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <FluencyStat testId="fluency-voice-turns" label="turnos hablados" value={String(fluency.voiceTurns)} />
+        <FluencyStat
+          testId="fluency-words-per-min"
+          label="ritmo"
+          value={`${fluency.avgWordsPerMin} ppm`}
+        />
+        <FluencyStat
+          testId="fluency-pauses"
+          label="pausas largas"
+          value={String(fluency.totalPausesOver800Ms)}
+        />
+        <FluencyStat testId="fluency-fillers" label="muletillas" value={String(fluency.totalFillers)} />
+      </div>
+    </section>
+  );
+}
+
+function FluencyStat({ testId, label, value }: { testId: string; label: string; value: string }) {
+  return (
+    <div data-testid={testId} className="rounded-lg bg-paper px-3 py-2.5">
+      <div className="text-lg font-semibold text-ink" data-testid={`${testId}-value`}>
+        {value}
+      </div>
+      <div className="text-xs text-ink-muted">{label}</div>
+    </div>
   );
 }
 

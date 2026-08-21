@@ -27,11 +27,11 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ error: "invalid_body", issues: z.treeifyError(parsed.error) }, { status: 400 });
     }
-    const { sessionId, text } = parsed.data;
+    const { sessionId, text, meta } = parsed.data;
     const db = getDb();
     const session = getOpenTalkSession(db, sessionId);
 
-    recordLearnerTurn(db, sessionId, text);
+    recordLearnerTurn(db, sessionId, text, meta ?? null);
 
     const turns = getTalkTurns(db, sessionId);
     const messages: ConverseInput["messages"] = turns.map((turn) => ({ role: turn.role, text: turn.text }));

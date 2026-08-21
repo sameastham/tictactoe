@@ -12,7 +12,7 @@ import { asc, desc, eq } from "drizzle-orm";
 import type { Db } from "@/db";
 import { content, talkTurns } from "@/db/schema";
 import { DEFAULT_USER_ID, newId } from "@/lib/ids";
-import type { ConverseInput, JudgeResult, JudgeTargetItem, TalkReport } from "@/lib/contracts";
+import type { ConverseInput, FluencyAggregate, JudgeResult, JudgeTargetItem, TalkReport, TalkTurnMeta } from "@/lib/contracts";
 import type { TaxonomyTag } from "@/lib/taxonomy";
 import { JUDGE_PROMPT_VERSION } from "@/server/language/prompts";
 import type { LanguageService } from "@/server/language/service";
@@ -136,27 +136,65 @@ export function seedTopic(db: Db): { topic: string; dueItems: JudgeTargetItem[] 
 }
 
 /** Appends one turn to `talk_turns` — the only write path into that table (insert-only, like `events`). */
-function insertTurn(db: Db, sessionId: string, role: "learner" | "tutor", text: string): TalkTurnRow {
+function insertTurn(
+  db: Db,
+  sessionId: string,
+  role: "learner" | "tutor",
+  text: string,
+  meta: TalkTurnMeta | null = null,
+): TalkTurnRow {
   const row: typeof talkTurns.$inferInsert = {
     id: newId(),
     userId: DEFAULT_USER_ID,
     sessionId,
     role,
     text,
+    meta,
     createdAt: new Date(),
   };
   db.insert(talkTurns).values(row).run();
   return db.select().from(talkTurns).where(eq(talkTurns.id, row.id)).get()!;
 }
 
-/** Records one learner-authored turn. */
-export function recordLearnerTurn(db: Db, sessionId: string, text: string): TalkTurnRow {
-  return insertTurn(db, sessionId, "learner", text);
+/**
+ * Records one learner-authored turn. `meta` is set when this turn came from
+ * the voice recorder (edited or not — editing the transcribed text before
+ * sending keeps the fluency meta, since it still describes the spoken
+ * attempt); omit it for a typed turn.
+ */
+export function recordLearnerTurn(db: Db, sessionId: string, text: string, meta?: TalkTurnMeta | null): TalkTurnRow {
+  return insertTurn(db, sessionId, "learner", text, meta ?? null);
 }
 
-/** Records one tutor-authored turn. */
+/** Records one tutor-authored turn. Tutor turns never carry `meta`. */
 export function recordTutorTurn(db: Db, sessionId: string, text: string): TalkTurnRow {
   return insertTurn(db, sessionId, "tutor", text);
+}
+
+/**
+ * Aggregates fluency markers across a session's voice-mode learner turns
+ * (see `TalkTurnMetaSchema`) — plain stats, no judgment. `avgWordsPerMin`
+ * averages each voice turn's own `wordsPerMin` rather than recomputing over
+ * a pooled word array, since separate turns' timestamps aren't one
+ * continuous timeline. Returns `null` when there are no voice turns.
+ */
+function aggregateFluency(turns: TalkTurnRow[]): FluencyAggregate | null {
+  const voiceTurns = turns
+    .filter((turn): turn is TalkTurnRow & { meta: TalkTurnMeta } => turn.role === "learner" && turn.meta !== null)
+    .map((turn) => turn.meta);
+
+  if (voiceTurns.length === 0) return null;
+
+  const totalWordsPerMin = voiceTurns.reduce((sum, meta) => sum + meta.fluency.wordsPerMin, 0);
+  const totalPausesOver800Ms = voiceTurns.reduce((sum, meta) => sum + meta.fluency.pausesOver800Ms, 0);
+  const totalFillers = voiceTurns.reduce((sum, meta) => sum + meta.fluency.fillerCount, 0);
+
+  return {
+    voiceTurns: voiceTurns.length,
+    avgWordsPerMin: Math.round((totalWordsPerMin / voiceTurns.length) * 10) / 10,
+    totalPausesOver800Ms,
+    totalFillers,
+  };
 }
 
 /** All turns for one session, oldest first. */
@@ -238,6 +276,7 @@ export async function endTalk(db: Db, sessionId: string, languageService: Langua
       itemsUsed: [],
       itemsAvoided: [],
       practiceNext: [],
+      fluency: aggregateFluency(turns),
     };
   }
 
@@ -264,6 +303,7 @@ export async function endTalk(db: Db, sessionId: string, languageService: Langua
     itemsUsed: result.items_used,
     itemsAvoided: result.items_avoided,
     practiceNext: derivePracticeNext(result),
+    fluency: aggregateFluency(turns),
   };
 }
 
@@ -284,6 +324,7 @@ export function getTalkReport(db: Db, sessionId: string): TalkReport {
 
   const writing = getWritingBySessionId(db, sessionId);
   const judgment = writing?.judgment ?? null;
+  const turns = getTalkTurns(db, sessionId);
 
   return {
     sessionId,
@@ -292,5 +333,6 @@ export function getTalkReport(db: Db, sessionId: string): TalkReport {
     itemsUsed: judgment?.items_used ?? [],
     itemsAvoided: judgment?.items_avoided ?? [],
     practiceNext: judgment ? derivePracticeNext(judgment) : [],
+    fluency: aggregateFluency(turns),
   };
 }

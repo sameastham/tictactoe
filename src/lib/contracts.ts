@@ -282,6 +282,22 @@ export type DueItem = z.infer<typeof DueItemSchema>;
 /** A single word's timing within an audio/video transcript. */
 export type WordTimestamp = { w: string; startMs: number; endMs: number };
 
+/**
+ * Fluency markers derived from one spoken turn's word timestamps — pure,
+ * client-safe (`computeFluency` in `src/lib/fluency.ts`), never model-judged.
+ * `durationMs`/`wordCount`/`wordsPerMin`/`pausesOver800Ms`/`longestPauseMs`/
+ * `fillerCount` are all zero for a zero-word transcript.
+ */
+export const FluencyMetricsSchema = z.object({
+  durationMs: z.number().int().nonnegative(),
+  wordCount: z.number().int().nonnegative(),
+  wordsPerMin: z.number().nonnegative(),
+  pausesOver800Ms: z.number().int().nonnegative(),
+  longestPauseMs: z.number().int().nonnegative(),
+  fillerCount: z.number().int().nonnegative(),
+});
+export type FluencyMetrics = z.infer<typeof FluencyMetricsSchema>;
+
 /** One transcript segment cut for dictation practice — see `buildSegments` in `src/lib/segments.ts`. */
 export const TranscriptSegmentSchema = z.object({
   index: z.number().int(),
@@ -344,10 +360,24 @@ export type CaptureMissBody = z.infer<typeof CaptureMissBodySchema>;
 export const TalkStartBodySchema = z.object({});
 export type TalkStartBody = z.infer<typeof TalkStartBodySchema>;
 
+/**
+ * Metadata attached to one learner turn recorded via the voice-mode
+ * recorder (plan §4.3 week 7). Tutor turns never carry `meta`. `kind` is a
+ * discriminant left room to grow (e.g. a future `"reduction_drill"` turn
+ * kind) without breaking existing stored rows.
+ */
+export const TalkTurnMetaSchema = z.object({
+  kind: z.literal("voice"),
+  fluency: FluencyMetricsSchema,
+});
+export type TalkTurnMeta = z.infer<typeof TalkTurnMetaSchema>;
+
 /** Body of "send a Talk message" (POST /api/talk/message). */
 export const TalkMessageBodySchema = z.object({
   sessionId: z.string(),
   text: z.string().min(1).max(1000),
+  /** Present when this turn originated from the voice recorder — see `TalkTurnMetaSchema`. */
+  meta: TalkTurnMetaSchema.optional(),
 });
 export type TalkMessageBody = z.infer<typeof TalkMessageBodySchema>;
 
@@ -358,12 +388,28 @@ export const TalkEndBodySchema = z.object({
 export type TalkEndBody = z.infer<typeof TalkEndBodySchema>;
 
 /**
+ * Fluency markers aggregated across a Talk session's voice-mode learner
+ * turns (see `TalkTurnMetaSchema`) — plain stats, no naturalness judgment.
+ * `avgWordsPerMin` averages each voice turn's own `wordsPerMin` (not a
+ * pooled recompute over merged word arrays, since separate turns' word
+ * timestamps aren't a single continuous timeline).
+ */
+export const FluencyAggregateSchema = z.object({
+  voiceTurns: z.number().int().nonnegative(),
+  avgWordsPerMin: z.number().nonnegative(),
+  totalPausesOver800Ms: z.number().int().nonnegative(),
+  totalFillers: z.number().int().nonnegative(),
+});
+export type FluencyAggregate = z.infer<typeof FluencyAggregateSchema>;
+
+/**
  * Post-session Talk report: evaluation runs asynchronously after the
  * conversation ends (never mid-chat), and this is its full shape — the
  * judged transcript, which target items came up and which didn't, and up to
  * three concrete practice pointers derived from the judgment's issue tags.
  * `judgment` is `null` when the session ended with nothing to judge (no
- * learner turns) or the judge call itself failed.
+ * learner turns) or the judge call itself failed. `fluency` is `null` when
+ * the session had no voice-mode learner turns.
  */
 export const TalkReportSchema = z.object({
   sessionId: z.string(),
@@ -372,5 +418,6 @@ export const TalkReportSchema = z.object({
   itemsUsed: z.array(z.string()),
   itemsAvoided: z.array(z.string()),
   practiceNext: z.array(z.string()).max(3),
+  fluency: FluencyAggregateSchema.nullable(),
 });
 export type TalkReport = z.infer<typeof TalkReportSchema>;

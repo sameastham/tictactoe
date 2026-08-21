@@ -23,7 +23,16 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Pixel 7"] },
+      use: {
+        ...devices["Pixel 7"],
+        // Fake mic stream + auto-granted mic permission, so the Talk voice
+        // recorder (plan §4.3 week 7 — see e2e/talk-voice.spec.ts) can run
+        // headless/unattended. Harmless for every other spec: they never
+        // touch getUserMedia.
+        launchOptions: {
+          args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
+        },
+      },
     },
   ],
   webServer: {

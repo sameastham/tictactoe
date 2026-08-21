@@ -1,7 +1,14 @@
 import { sql } from "drizzle-orm";
 import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { CEFR_LEVELS, EVENT_TYPES, REGISTERS, SURFACES, TAXONOMY, type TaxonomyTag } from "@/lib/taxonomy";
-import type { EventPayload, JudgeResult, JudgeTargetItem, StoredExtraction, WordTimestamp } from "@/lib/contracts";
+import type {
+  EventPayload,
+  JudgeResult,
+  JudgeTargetItem,
+  StoredExtraction,
+  TalkTurnMeta,
+  WordTimestamp,
+} from "@/lib/contracts";
 
 /** A piece of source content (article/paste/audio/video) the learner consumed. */
 export const content = sqliteTable(
@@ -77,6 +84,10 @@ export const sessions = sqliteTable(
  * posture as `events`: no update/delete is exposed anywhere (see
  * `src/server/talk.ts`) — a correction would be a new turn, never an edit of
  * one already sent.
+ *
+ * `meta` is nullable and, today, only ever set on a learner turn recorded
+ * via the voice recorder (plan §4.3 week 7) — tutor turns never carry it,
+ * and a typed turn has `meta: null`. See `TalkTurnMetaSchema`.
  */
 export const talkTurns = sqliteTable(
   "talk_turns",
@@ -88,6 +99,7 @@ export const talkTurns = sqliteTable(
       .references(() => sessions.id),
     role: text("role", { enum: ["learner", "tutor"] }).notNull(),
     text: text("text").notNull(),
+    meta: text("meta", { mode: "json" }).$type<TalkTurnMeta>(),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [index("talk_turns_session_created_idx").on(table.sessionId, table.createdAt)],
