@@ -7,7 +7,10 @@ export default async function ListenDetailPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const db = getDb();
   const row = getContent(db, id);
-  if (!row || row.type !== "audio") {
+  // "video" rows (YouTube ingests via src/server/mediafetch/) are Listen
+  // surface content too — both types carry a mediaPath and drive the same
+  // dictation flow, they just differ in provenance.
+  if (!row || (row.type !== "audio" && row.type !== "video")) {
     notFound();
   }
 

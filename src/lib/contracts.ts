@@ -227,6 +227,19 @@ export const CreateContentBodySchema = z.union([
 ]);
 export type CreateContentBody = z.infer<typeof CreateContentBodySchema>;
 
+/**
+ * Body of the "ingest media from a URL" (POST /api/media, JSON branch) API
+ * request — the Listen surface's YouTube/podcast ingestion path (plan §4.1,
+ * see `src/server/mediafetch/`). The existing multipart-upload branch of
+ * `POST /api/media` is untouched; this is the alternate `application/json`
+ * body the route also accepts.
+ */
+export const MediaUrlBodySchema = z.object({
+  url: z.string().url(),
+  title: z.string().optional(),
+});
+export type MediaUrlBody = z.infer<typeof MediaUrlBodySchema>;
+
 /** Body of the "decide on a candidate" API request. */
 export const DecisionBodySchema = z.object({
   contentId: z.string(),

@@ -12,6 +12,23 @@ npm run seed
 npm run dev
 ```
 
+## Listen surface: speech-to-text and URL ingestion
+
+Dictation transcription (`src/server/stt/`) and YouTube/podcast URL ingestion
+(`src/server/mediafetch/`) both run out of the same local Python venv, `.venv-stt/`, which isn't
+checked in. Create it once and install both:
+
+```bash
+python3 -m venv .venv-stt
+.venv-stt/bin/pip install faster-whisper
+.venv-stt/bin/pip install yt-dlp
+```
+
+Neither is required for `npm run dev`/`npm test`/`npm run e2e` — those default to (or force, for
+e2e) the deterministic `fixture` STT provider and never shell out to yt-dlp — but both are needed
+for a real end-to-end Listen surface on the MacBook (see CLAUDE.md Sec.6: `faster-whisper`, not
+`mlx-whisper`, since the deployment target has no Apple Silicon).
+
 ## Android app
 
 The Android app is a thin [Capacitor](https://capacitorjs.com) WebView shell — it has no

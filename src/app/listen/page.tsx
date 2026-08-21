@@ -23,8 +23,10 @@ function displayTitle(title: string | null): string {
 export default function ListenPage() {
   const db = getDb();
   // `listContent` has no type filter of its own — Listen only cares about
-  // "audio" rows, so the article/paste rows from Read are dropped here.
-  const audioContents = listContent(db, 50).filter((row) => row.type === "audio");
+  // "audio"/"video" rows (the latter is a YouTube ingest via
+  // src/server/mediafetch/, same dictation flow, different provenance), so
+  // the article/paste rows from Read are dropped here.
+  const audioContents = listContent(db, 50).filter((row) => row.type === "audio" || row.type === "video");
 
   return (
     <div className="min-h-dvh">
