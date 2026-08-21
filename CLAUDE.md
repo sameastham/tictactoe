@@ -9,9 +9,18 @@ ladder. Everything that happens is logged to an append-only event log; the learn
 derived from that log, not stored separately. Everything derives from the append-only event log;
 surfaces are interfaces over it.
 
-Currently built: the Read surface (URL fetch / paste → `content` row) and `LanguageService.extract`
-(article → candidate chunks). Not yet built: Listen (dictation), Fix (judge), Talk (converse), the
-FSRS review scheduler, and the eval harness over `gold_set`. Don't assume any of these exist.
+Currently built: all four surfaces — Read (URL fetch / paste → `content` row, `LanguageService.extract`),
+Listen (audio upload → dictation, `src/lib/dictation.ts` + `src/server/stt/`), Fix
+(`LanguageService.judge`, override/adjudication), and Talk (`LanguageService.converse` + async
+post-session `judge`, `src/server/talk.ts`) — plus the FSRS review scheduler
+(`src/server/scheduler.ts`, `ts-fsrs`), the weekly report (`/report`, `src/server/report.ts`), and
+the eval harness + gold-set builders over `gold_set`/`eval_runs` (`src/server/goldset/`,
+`scripts/goldset.ts`, `scripts/eval.ts`). Not yet built: ingesting content from a URL that isn't a
+readable article (e.g. yt-dlp caption ingestion for video/podcast sources — Listen currently only
+takes an uploaded audio file), a voice mode for Talk (text-only today), further Listen stages
+beyond dictation (recognition/production follow-ups), and a learner mastery model beyond FSRS
+due/priority (`weak_categories`/`due_items` are frequency- and recency-derived, not a real per-item
+mastery score). Don't assume any of these exist.
 
 ## 2. Commands
 
@@ -28,7 +37,13 @@ FSRS review scheduler, and the eval harness over `gold_set`. Don't assume any of
 - `npm run db:migrate` — `drizzle-kit migrate`, applies migrations to `DB_PATH` (default
   `data/app.db`).
 - `npm run seed` — `tsx scripts/seed.ts`: applies migrations, then idempotently inserts the
-  fixture article as a first content row.
+  fixture article, fixture dictation audio, and a small gold-source notes content row.
+- `npm run goldset` — `tsx scripts/goldset.ts`: idempotently derives `natural_control` and
+  `seeded_error` `gold_set` rows from every content row's text (see `src/server/goldset/`). Run
+  after `npm run seed`.
+- `npm run eval` — `tsx scripts/eval.ts`: runs `judge` over every `gold_set` row, prints a
+  false-flag/catch-rate/tag-accuracy/adjudicated-agreement table, and inserts one `eval_runs` row.
+  Run after `npm run goldset`.
 
 `MODEL_PROVIDER=fixture` forces the deterministic, no-network `FixtureProvider`. With
 `MODEL_PROVIDER` unset and no `ANTHROPIC_API_KEY`, fixture is the automatic default (see
@@ -38,9 +53,9 @@ to hit the real API.
 ## 3. Hard rules
 
 - **No model calls outside `src/server/language/`.** `LanguageService` (`service.ts`) is the only
-  gateway; there are exactly three prompt purposes: `extract`, `judge`, `converse` (`judge` and
-  `converse` currently throw `NotImplementedError`). Every provider call — success or failure —
-  must produce one `model_calls` row via `logModelCall`.
+  gateway; there are exactly three prompt purposes: `extract`, `judge`, `converse` — all three are
+  implemented (`judge.v1`, `converse.v1`, alongside `extract.v1`). Every provider call — success or
+  failure — must produce one `model_calls` row via `logModelCall`.
 - **`events` is append-only.** Never `UPDATE` or `DELETE` a row in `events`; a correction is a new
   event, not an edit. `src/server/repo.ts` deliberately exposes no event-mutation function — keep
   it that way. Decisions (keep/discard) are derived by replaying `captured`/`discarded` events
@@ -100,13 +115,18 @@ improvement.
 Prompts live in `prompts/` as `name.vN.md` (e.g. `prompts/extract.v1.md`); the filename **is**
 the version, loaded by `loadPrompt(name, version)` in `src/server/language/prompts.ts`. Any
 semantic edit to a prompt is a new file with a bumped version — never an in-place rewrite of an
-existing `.md`. `EXTRACT_PROMPT_VERSION` (currently `"v1"`) is recorded on every `model_calls` row
-and on the `StoredExtraction` persisted to `content.extraction` — preserve this provenance trail
-for `judge` and `converse` when they're built.
+existing `.md`. All three purposes are on `v1` today (`EXTRACT_PROMPT_VERSION`,
+`JUDGE_PROMPT_VERSION`, `CONVERSE_PROMPT_VERSION` in `prompts.ts`); each is recorded on every
+`model_calls` row, and `extract`'s/`judge`'s are additionally persisted on `content.extraction` /
+`writings.promptVersion` — preserve this provenance trail on any future version bump.
 
-`buildLearnerBlock(db)` (`src/server/learner.ts`) assembles the learner profile — static config
-from `config/learner.json` plus the 5 most recent `produced_error` events from the log — and is
-passed to every model call via `renderPrompt`, which substitutes `{{LEARNER_BLOCK}}`.
+`buildLearnerBlock(db)` (`src/server/learner.ts`) assembles the learner profile — static
+`level`/`goal` from `config/learner.json`, `weak_categories` derived from the last-30-days
+`produced_error` log once >=5 such events exist (else the config fallback; see
+`deriveRecentErrorTagCounts`/`topWeakCategories` in `src/server/scheduler.ts`, shared with
+`getDueItems`'s priority weighting), the 5 most recent `produced_error` events, and `due_items`
+from `getDueItems(db, 5)` — and is passed to every model call via `renderPrompt`, which substitutes
+`{{LEARNER_BLOCK}}`.
 
 ## 6. Model policy
 
@@ -117,7 +137,9 @@ passed to every model call via `renderPrompt`, which substitutes `{{LEARNER_BLOC
   Listen surface is built, do NOT reach for `mlx-whisper` (Apple Silicon only): use
   `faster-whisper` (CTranslate2, CPU int8) or a hosted STT API for transcription.
 - `fixture` provider (`FixtureProvider`) is deterministic and network-free, for tests/offline dev;
-  it only implements `purpose: "extract"` and throws for `judge`/`converse`.
+  it implements all three purposes, each via a small set of hardcoded rules (e.g. `judge` flags the
+  literal phrases "hacer sentido", "depender que", "muy muy" — see `providers/fixture.ts`), not a
+  real judgment — treat its eval numbers as rule-coverage, not judge quality.
 - Both live behind the `ModelProvider` interface (`provider.ts`) — `completeJson<T>` in,
   schema-validated `{ data, model, usage }` out. Don't call the Anthropic SDK from anywhere else.
 - On `claude-opus-5`, never pass `thinking`, `temperature`, or `top_p` — the API rejects them.

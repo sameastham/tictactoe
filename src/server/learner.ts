@@ -6,7 +6,8 @@ import type { Db } from "@/db";
 import { events } from "@/db/schema";
 import { DEFAULT_USER_ID } from "@/lib/ids";
 import { LearnerBlockSchema, type LearnerBlock } from "@/lib/contracts";
-import { TAXONOMY } from "@/lib/taxonomy";
+import { TAXONOMY, type TaxonomyTag } from "@/lib/taxonomy";
+import { deriveRecentErrorTagCounts, getDueItems, topWeakCategories } from "@/server/scheduler";
 
 const LearnerConfigSchema = z.object({
   level: z.string(),
@@ -38,11 +39,32 @@ export function loadLearnerConfig(): LearnerConfig {
   return cachedConfig;
 }
 
+/** Number of last-30-days `produced_error` events required before weak_categories switches from the config fallback to the derived top-3. */
+const WEAK_CATEGORY_EVENT_THRESHOLD = 5;
+
+/**
+ * `weak_categories` for the learner block: once at least
+ * {@link WEAK_CATEGORY_EVENT_THRESHOLD} `produced_error` events exist in the
+ * last 30 days, the derived top-3 tags by frequency (reusing the scheduler's
+ * own counting — see `deriveRecentErrorTagCounts` in `src/server/scheduler.ts`
+ * — rather than re-querying the log here); otherwise the static
+ * `config/learner.json` fallback, same posture as the scheduler's own
+ * weak-category bucket.
+ */
+function deriveWeakCategories(db: Db): TaxonomyTag[] {
+  const { counts, total } = deriveRecentErrorTagCounts(db);
+  if (total >= WEAK_CATEGORY_EVENT_THRESHOLD) {
+    return topWeakCategories(counts);
+  }
+  return loadLearnerConfig().weak_categories;
+}
+
 /**
  * Builds the learner profile block injected into model prompts: static
- * config (level/goal/weak_categories) plus the most recent production
- * errors pulled from the event log. `due_items` is always empty for now —
- * the spaced-repetition scheduler that would populate it doesn't exist yet.
+ * config (level/goal, and weak_categories as a fallback) plus the most
+ * recent production errors and due items pulled from/derived over the event
+ * log — see {@link deriveWeakCategories} and `getDueItems`
+ * (`src/server/scheduler.ts`).
  */
 export function buildLearnerBlock(db: Db): LearnerBlock {
   const config = loadLearnerConfig();
@@ -70,9 +92,9 @@ export function buildLearnerBlock(db: Db): LearnerBlock {
     level: config.level,
     variant: "Mexican Spanish",
     goal: config.goal,
-    weak_categories: config.weak_categories,
+    weak_categories: deriveWeakCategories(db),
     recent_errors,
-    due_items: [],
+    due_items: getDueItems(db, 5).map((item) => item.chunk),
   };
 
   return LearnerBlockSchema.parse(block);

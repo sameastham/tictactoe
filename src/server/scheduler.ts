@@ -129,6 +129,44 @@ export function deriveItemSchedule(
 }
 
 /**
+ * Counts `produced_error` events by taxonomy tag in the last 30 days, plus
+ * the total qualifying count — the shared signal behind both `getDueItems`'s
+ * weak-category priority bucket (below) and `buildLearnerBlock`'s
+ * `weak_categories` (`src/server/learner.ts`), so the two derive from one
+ * query instead of two competing implementations. Each caller applies its
+ * own threshold on top of `total`/`counts` (see `deriveWeakCategorySignals`
+ * here and `deriveWeakCategories` in `src/server/learner.ts`).
+ */
+export function deriveRecentErrorTagCounts(
+  db: Db,
+  now: Date = new Date(),
+): { counts: Map<TaxonomyTag, number>; total: number } {
+  const cutoff = new Date(now.getTime() - WEAK_CATEGORY_WINDOW_MS);
+  const rows = db
+    .select({ taxonomy: events.taxonomy })
+    .from(events)
+    .where(and(eq(events.userId, DEFAULT_USER_ID), eq(events.type, "produced_error"), gte(events.createdAt, cutoff)))
+    .all();
+
+  const counts = new Map<TaxonomyTag, number>();
+  let total = 0;
+  for (const { taxonomy } of rows) {
+    if (!taxonomy) continue;
+    counts.set(taxonomy, (counts.get(taxonomy) ?? 0) + 1);
+    total++;
+  }
+  return { counts, total };
+}
+
+/** The top `max` taxonomy tags in `counts`, most frequent first (ties broken by `Map` iteration order). */
+export function topWeakCategories(counts: Map<TaxonomyTag, number>, max = TOP_WEAK_CATEGORIES): TaxonomyTag[] {
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, max)
+    .map(([tag]) => tag);
+}
+
+/**
  * Derives the last-30-days weak-category signals used by `getDueItems`'s
  * priority weighting: which taxonomy tags are "recurring" (>=3 produced_error
  * events) and the top-3 weak categories by recent error frequency. Falls
@@ -141,31 +179,14 @@ function deriveWeakCategorySignals(
   db: Db,
   now: Date,
 ): { recurringTags: Set<TaxonomyTag>; weakCategories: TaxonomyTag[] } {
-  const cutoff = new Date(now.getTime() - WEAK_CATEGORY_WINDOW_MS);
-  const rows = db
-    .select({ taxonomy: events.taxonomy })
-    .from(events)
-    .where(and(eq(events.userId, DEFAULT_USER_ID), eq(events.type, "produced_error"), gte(events.createdAt, cutoff)))
-    .all();
-
-  const counts = new Map<TaxonomyTag, number>();
-  for (const { taxonomy } of rows) {
-    if (!taxonomy) continue;
-    counts.set(taxonomy, (counts.get(taxonomy) ?? 0) + 1);
-  }
+  const { counts } = deriveRecentErrorTagCounts(db, now);
 
   const recurringTags = new Set<TaxonomyTag>();
   for (const [tag, count] of counts) {
     if (count >= RECURRING_ERROR_THRESHOLD) recurringTags.add(tag);
   }
 
-  const weakCategories =
-    counts.size > 0
-      ? [...counts.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, TOP_WEAK_CATEGORIES)
-          .map(([tag]) => tag)
-      : loadLearnerConfig().weak_categories;
+  const weakCategories = counts.size > 0 ? topWeakCategories(counts) : loadLearnerConfig().weak_categories;
 
   return { recurringTags, weakCategories };
 }

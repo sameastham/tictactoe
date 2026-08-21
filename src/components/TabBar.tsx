@@ -94,11 +94,21 @@ function ChatIcon({ active }: { active: boolean }) {
   );
 }
 
+function ChartIcon({ active }: { active: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+      <path d="M5 19V10.5M12 19V5M19 19v-6.5" stroke="currentColor" strokeWidth={active ? 2 : 1.6} strokeLinecap="round" />
+      <path d="M3.5 19.5h17" stroke="currentColor" strokeWidth={active ? 2 : 1.6} strokeLinecap="round" />
+    </svg>
+  );
+}
+
 const TABS = [
   { href: "/", label: "Leer", icon: BookIcon, testId: "tab-leer" },
   { href: "/fix", label: "Escribir", icon: PencilIcon, testId: "tab-escribir" },
   { href: "/listen", label: "Escuchar", icon: HeadphonesIcon, testId: "tab-escuchar" },
   { href: "/talk", label: "Hablar", icon: ChatIcon, testId: "tab-hablar" },
+  { href: "/report", label: "Reporte", icon: ChartIcon, testId: "tab-reporte" },
 ] as const;
 
 /**

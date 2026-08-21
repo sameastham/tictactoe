@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { getDb } from "@/db";
-import { seedFixtureArticle, seedFixtureAudio } from "../scripts/seed-fixture-article";
+import { seedFixtureArticle, seedFixtureAudio, seedGoldSourceContent } from "../scripts/seed-fixture-article";
 
 /**
  * Must match `webServer.env.DB_PATH` in playwright.config.ts — this process
@@ -39,4 +39,5 @@ export default async function globalSetup(): Promise<void> {
   migrate(db, { migrationsFolder: "./drizzle" });
   seedFixtureArticle(db);
   seedFixtureAudio(db);
+  seedGoldSourceContent(db);
 }
