@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { listContent } from "@/server/repo";
 import { SOURCE_LABELS } from "@/lib/labels";
 import { timeAgo } from "@/lib/time";
+import { ReviewQueue } from "@/components/ReviewQueue";
 
 // This page reads the content list straight from sqlite (a synchronous,
 // predictable read Next can't tell is per-request). Without forcing dynamic
@@ -27,6 +28,8 @@ export default function Home() {
         <h1 className="text-2xl font-bold tracking-tight">Español Coach</h1>
         <p className="mt-0.5 text-sm text-ink-muted">Tu entrenador de español mexicano</p>
       </header>
+
+      <ReviewQueue />
 
       <main className="px-4 pb-28 pt-4">
         {contents.length === 0 ? (

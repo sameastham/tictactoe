@@ -12,6 +12,8 @@ import type {
   JudgeTargetItem,
   ProducedErrorPayload,
   ProducedOkPayload,
+  ReviewedPayload,
+  ReviewRating,
   StoredExtraction,
 } from "@/lib/contracts";
 import type { Rung, Surface } from "@/lib/taxonomy";
@@ -510,6 +512,39 @@ export function recordAdjudication(db: Db, input: RecordAdjudicationInput): { go
 
     return { goldSetId };
   });
+}
+
+// -----------------------------------------------------------------------------
+// reviews (Review scheduler's home-screen Repaso queue)
+// -----------------------------------------------------------------------------
+
+export type RecordReviewInput = {
+  item: ItemRow;
+  rating: ReviewRating;
+};
+
+/**
+ * Appends one `reviewed` event for a Repaso card answer — a single insert,
+ * no read-modify-write, keeping with the append-only log (scheduling state
+ * itself is never stored; see `src/server/scheduler.ts`, which replays this
+ * event back into an FSRS grade the next time the item's schedule is derived).
+ */
+export function recordReview(db: Db, input: RecordReviewInput): { eventId: string } {
+  const { item, rating } = input;
+  const eventId = newId();
+  const payload: ReviewedPayload = { itemId: item.id, chunk: item.chunk, rating, mode: "card" };
+  db.insert(events)
+    .values({
+      id: eventId,
+      userId: DEFAULT_USER_ID,
+      type: "reviewed",
+      surface: "review",
+      itemId: item.id,
+      payload,
+      createdAt: new Date(),
+    })
+    .run();
+  return { eventId };
 }
 
 // -----------------------------------------------------------------------------

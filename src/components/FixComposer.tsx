@@ -13,7 +13,23 @@ interface RecentItem {
   createdAt: string;
 }
 
+interface DueItemDto {
+  id: string;
+  chunk: string;
+  register: Register;
+}
+
+/** A Reto chip's source item, plus whether the scheduler currently has it due. */
+interface RetoItem {
+  id: string;
+  chunk: string;
+  register: Register;
+  due: boolean;
+}
+
 const PRESELECT_COUNT = 3;
+const RETO_CHIP_COUNT = 6;
+const TOP_UP_THRESHOLD = 3;
 
 /** Auto-composed task line for Reto mode: names the challenge and, when chunks are picked, what to use. */
 function buildTask(chunks: string[]): string {
@@ -44,23 +60,54 @@ export function FixComposer() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("libre");
   const [text, setText] = useState("");
-  const [items, setItems] = useState<RecentItem[] | null>(null);
+  const [items, setItems] = useState<RetoItem[] | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const preselectedRef = useRef(false);
 
+  // Reto's target-item chips: due items first (the scheduler's Fix-prompt
+  // delivery preference), topped up with the most recent captures when the
+  // learner doesn't have >= 3 due yet, so the panel never looks sparse for a
+  // fresh learner. Due items are marked so their chip can show a due badge.
   useEffect(() => {
-    fetch("/api/items/recent?limit=6")
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data: { items: RecentItem[] }) => {
-        setItems(data.items);
-        if (!preselectedRef.current) {
-          preselectedRef.current = true;
-          setSelectedIds(new Set(data.items.slice(0, PRESELECT_COUNT).map((item) => item.id)));
+    async function load() {
+      let due: RetoItem[] = [];
+      try {
+        const res = await fetch(`/api/items/due?limit=${RETO_CHIP_COUNT}`);
+        if (res.ok) {
+          const data = (await res.json()) as { items: DueItemDto[] };
+          due = data.items.map((item) => ({ id: item.id, chunk: item.chunk, register: item.register, due: true }));
         }
-      })
-      .catch(() => setItems([]));
+      } catch {
+        // fall through to recent-only below
+      }
+
+      let merged = due;
+      if (merged.length < TOP_UP_THRESHOLD) {
+        try {
+          const res = await fetch(`/api/items/recent?limit=${RETO_CHIP_COUNT}`);
+          if (res.ok) {
+            const data = (await res.json()) as { items: RecentItem[] };
+            const seen = new Set(merged.map((item) => item.id));
+            for (const item of data.items) {
+              if (seen.has(item.id) || merged.length >= RETO_CHIP_COUNT) continue;
+              seen.add(item.id);
+              merged = [...merged, { id: item.id, chunk: item.chunk, register: item.register, due: false }];
+            }
+          }
+        } catch {
+          // keep whatever due items we already have
+        }
+      }
+
+      setItems(merged);
+      if (!preselectedRef.current) {
+        preselectedRef.current = true;
+        setSelectedIds(new Set(merged.slice(0, PRESELECT_COUNT).map((item) => item.id)));
+      }
+    }
+    load().catch(() => setItems([]));
   }, []);
 
   function toggleChip(id: string) {
@@ -175,7 +222,7 @@ function RetoPanel({
   onToggle,
   taskPreview,
 }: {
-  items: RecentItem[] | null;
+  items: RetoItem[] | null;
   selectedIds: Set<string>;
   onToggle: (id: string) => void;
   taskPreview: string;
@@ -201,13 +248,23 @@ function RetoPanel({
                   data-testid="item-chip"
                   data-item-id={item.id}
                   data-selected={selected}
+                  data-due={item.due}
                   onClick={() => onToggle(item.id)}
                   className={
                     selected
-                      ? "inline-flex items-center rounded-full bg-accent px-3 py-1.5 text-sm font-semibold text-accent-fg"
-                      : "inline-flex items-center rounded-full border border-line px-3 py-1.5 text-sm font-medium text-ink-muted active:bg-line/30"
+                      ? "inline-flex items-center gap-1.5 rounded-full bg-accent px-3 py-1.5 text-sm font-semibold text-accent-fg"
+                      : "inline-flex items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-sm font-medium text-ink-muted active:bg-line/30"
                   }
                 >
+                  {item.due && (
+                    <span
+                      data-testid="item-chip-due-dot"
+                      aria-hidden="true"
+                      className={
+                        selected ? "h-1.5 w-1.5 rounded-full bg-accent-fg/70" : "h-1.5 w-1.5 rounded-full bg-accent"
+                      }
+                    />
+                  )}
                   {item.chunk}
                 </button>
               );

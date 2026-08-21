@@ -23,8 +23,13 @@ const RecentErrorPayloadSchema = z.object({
 
 let cachedConfig: LearnerConfig | undefined;
 
-/** Reads and validates `config/learner.json`, caching the parsed result. */
-function loadLearnerConfig(): LearnerConfig {
+/**
+ * Reads and validates `config/learner.json`, caching the parsed result.
+ * Exported (not just used internally) so `src/server/scheduler.ts` can reuse
+ * its static `weak_categories` as the fallback when there's no recent
+ * `produced_error` event data to derive weak categories from.
+ */
+export function loadLearnerConfig(): LearnerConfig {
   if (!cachedConfig) {
     const filePath = path.join(process.cwd(), "config", "learner.json");
     const raw = fs.readFileSync(filePath, "utf-8");

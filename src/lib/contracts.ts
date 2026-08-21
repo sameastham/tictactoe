@@ -170,6 +170,19 @@ export const ItemAvoidedPayloadSchema = z.object({
 });
 export type ItemAvoidedPayload = z.infer<typeof ItemAvoidedPayloadSchema>;
 
+/** The four FSRS review ratings, spelled out for wire payloads/bodies. */
+export const REVIEW_RATINGS = ["again", "hard", "good", "easy"] as const;
+export type ReviewRating = (typeof REVIEW_RATINGS)[number];
+
+/** Payload of a `reviewed` event: a home-screen Repaso card answered by the learner. */
+export const ReviewedPayloadSchema = z.object({
+  itemId: z.string(),
+  chunk: z.string(),
+  rating: z.enum(REVIEW_RATINGS),
+  mode: z.literal("card"),
+});
+export type ReviewedPayload = z.infer<typeof ReviewedPayloadSchema>;
+
 /** Payload of an `adjudicated` event: the learner's override of the model's rung for one sentence. */
 export const AdjudicatedPayloadSchema = z.object({
   writingId: z.string(),
@@ -192,6 +205,7 @@ export type EventPayload =
   | ProducedErrorPayload
   | ItemAvoidedPayload
   | AdjudicatedPayload
+  | ReviewedPayload
   | Record<string, unknown>;
 
 /** A model extraction result as persisted on a content row, with provenance. */
@@ -235,6 +249,33 @@ export const AdjudicationBodySchema = z.object({
   note: z.string().optional(),
 });
 export type AdjudicationBody = z.infer<typeof AdjudicationBodySchema>;
+
+/** Body of the "review a Repaso card" (POST /api/reviews) API request. */
+export const ReviewBodySchema = z.object({
+  itemId: z.string(),
+  rating: z.enum(REVIEW_RATINGS),
+});
+export type ReviewBody = z.infer<typeof ReviewBodySchema>;
+
+/**
+ * Why the scheduler surfaced this item ahead of others due at the same time —
+ * see `getDueItems`'s priority weighting in `src/server/scheduler.ts`.
+ */
+export const PRIORITY_REASONS = ["recurring_error", "weak_category", "recent", "standard"] as const;
+export type PriorityReason = (typeof PRIORITY_REASONS)[number];
+
+/** A due item as served by `GET /api/items/due` and consumed by the Repaso queue. */
+export const DueItemSchema = z.object({
+  id: z.string(),
+  chunk: z.string(),
+  register: z.enum(REGISTERS),
+  originSentence: z.string(),
+  contrastSet: z.array(z.string()).nullable(),
+  /** ISO 8601 — the ts-fsrs card's `due` at derivation time. */
+  due: z.string(),
+  priorityReason: z.enum(PRIORITY_REASONS),
+});
+export type DueItem = z.infer<typeof DueItemSchema>;
 
 /** A single word's timing within an audio/video transcript. */
 export type WordTimestamp = { w: string; startMs: number; endMs: number };
