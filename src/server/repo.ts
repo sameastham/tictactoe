@@ -385,6 +385,8 @@ export type RecordJudgmentEventsInput = {
   targetItems: JudgeTargetItem[];
   /** The writing's task, echoed onto `item_avoided` payloads. */
   task?: string | null;
+  /** Which surface produced this judgment — stamped on every event this writes. Defaults to "fix" (Fix's original, and still most common, caller). */
+  surface?: Surface;
 };
 
 export type RecordJudgmentEventsCounts = {
@@ -397,10 +399,13 @@ export type RecordJudgmentEventsCounts = {
  * Records the event-log consequences of one judgment, in a single
  * transaction: one `produced_error` event per issue on an `incorrect`
  * sentence, one `produced_ok` event per used target item, one `item_avoided`
- * event per avoided target item.
+ * event per avoided target item. Every event's `surface` is `input.surface`
+ * (defaults to "fix") — pass the surface that actually produced the
+ * judgment (e.g. "talk", "listen") so the event log attributes production
+ * correctly.
  */
 export function recordJudgmentEvents(db: Db, input: RecordJudgmentEventsInput): RecordJudgmentEventsCounts {
-  const { writingId, judgment, targetItems, task = null } = input;
+  const { writingId, judgment, targetItems, task = null, surface = "fix" } = input;
   const chunkById = new Map(targetItems.map((item) => [item.id, item.chunk]));
 
   return db.transaction((tx) => {
@@ -426,7 +431,7 @@ export function recordJudgmentEvents(db: Db, input: RecordJudgmentEventsInput): 
             id: newId(),
             userId: DEFAULT_USER_ID,
             type: "produced_error",
-            surface: "fix",
+            surface,
             taxonomy: issue.tag,
             severity: issue.severity,
             payload,
@@ -452,7 +457,7 @@ export function recordJudgmentEvents(db: Db, input: RecordJudgmentEventsInput): 
           id: newId(),
           userId: DEFAULT_USER_ID,
           type: "produced_ok",
-          surface: "fix",
+          surface,
           itemId,
           payload,
           createdAt: now,
@@ -473,7 +478,7 @@ export function recordJudgmentEvents(db: Db, input: RecordJudgmentEventsInput): 
           id: newId(),
           userId: DEFAULT_USER_ID,
           type: "item_avoided",
-          surface: "fix",
+          surface,
           itemId,
           payload,
           createdAt: now,

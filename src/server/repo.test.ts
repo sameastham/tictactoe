@@ -409,6 +409,54 @@ describe("recordJudgmentEvents", () => {
       task: "tarea de prueba",
     });
   });
+
+  it("defaults every event's surface to 'fix' when `surface` is omitted", () => {
+    const w = createWriting(db, { task: null, text: "Esto no puede hacer sentido. Voy al mercado los sábados." });
+    insertItem(db, "it_default_surface", "al mercado");
+    const targetItems: JudgeTargetItem[] = [{ id: "it_default_surface", chunk: "al mercado" }];
+    const judgment = makeJudgeResult({ items_used: ["it_default_surface"], items_avoided: [] });
+
+    recordJudgmentEvents(db, { writingId: w.id, judgment, targetItems });
+
+    const errorEvents = db.select().from(events).where(eq(events.type, "produced_error")).all();
+    const okEvents = db.select().from(events).where(eq(events.type, "produced_ok")).all();
+    expect(errorEvents.every((e) => e.surface === "fix")).toBe(true);
+    expect(okEvents.every((e) => e.surface === "fix")).toBe(true);
+  });
+
+  it("stamps every event's surface with the caller-supplied `surface` (e.g. 'listen')", () => {
+    const w = createWriting(db, {
+      task: "listen:reformula:content_1:0",
+      text: "Esto no puede hacer sentido. Voy al mercado los sábados.",
+    });
+    insertItem(db, "it_listen_surface", "al mercado");
+    const targetItems: JudgeTargetItem[] = [{ id: "it_listen_surface", chunk: "al mercado" }];
+    const judgment = makeJudgeResult({ items_used: ["it_listen_surface"], items_avoided: [] });
+
+    const counts = recordJudgmentEvents(db, { writingId: w.id, judgment, targetItems, surface: "listen" });
+
+    expect(counts.producedError).toBe(2);
+    expect(counts.producedOk).toBe(1);
+    const errorEvents = db.select().from(events).where(eq(events.type, "produced_error")).all();
+    const okEvents = db.select().from(events).where(eq(events.type, "produced_ok")).all();
+    expect(errorEvents).toHaveLength(2);
+    expect(okEvents).toHaveLength(1);
+    expect(errorEvents.every((e) => e.surface === "listen")).toBe(true);
+    expect(okEvents.every((e) => e.surface === "listen")).toBe(true);
+  });
+
+  it("stamps an item_avoided event's surface with the caller-supplied `surface` too", () => {
+    const w = createWriting(db, { task: "listen:reformula:content_1:0", text: "Esto no puede hacer sentido." });
+    insertItem(db, "it_avoided_listen", "hacer la maleta");
+    const targetItems: JudgeTargetItem[] = [{ id: "it_avoided_listen", chunk: "hacer la maleta" }];
+    const judgment = makeJudgeResult({ items_used: [], items_avoided: ["it_avoided_listen"] });
+
+    recordJudgmentEvents(db, { writingId: w.id, judgment, targetItems, surface: "listen" });
+
+    const avoidedEvents = db.select().from(events).where(eq(events.type, "item_avoided")).all();
+    expect(avoidedEvents).toHaveLength(1);
+    expect(avoidedEvents[0].surface).toBe("listen");
+  });
 });
 
 describe("recordAdjudication", () => {

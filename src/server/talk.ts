@@ -294,7 +294,7 @@ export async function endTalk(db: Db, sessionId: string, languageService: Langua
   );
 
   saveJudgment(db, writing.id, result, JUDGE_PROMPT_VERSION, model);
-  recordJudgmentEvents(db, { writingId: writing.id, judgment: result, targetItems, task });
+  recordJudgmentEvents(db, { writingId: writing.id, judgment: result, targetItems, task, surface: "talk" });
 
   return {
     sessionId,

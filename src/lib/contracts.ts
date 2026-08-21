@@ -352,6 +352,18 @@ export const CaptureMissBodySchema = z.object({
 });
 export type CaptureMissBody = z.infer<typeof CaptureMissBodySchema>;
 
+/**
+ * Body of the "reformulate a dictation segment in your own words" (POST
+ * /api/listen/produce) API request — the listening->production follow-up
+ * ("Ahora dilo tú", plan §4.1).
+ */
+export const ListenProduceBodySchema = z.object({
+  contentId: z.string(),
+  segmentIndex: z.number().int().min(0),
+  text: z.string().min(1).max(1000),
+});
+export type ListenProduceBody = z.infer<typeof ListenProduceBodySchema>;
+
 // -----------------------------------------------------------------------------
 // Talk surface
 // -----------------------------------------------------------------------------
