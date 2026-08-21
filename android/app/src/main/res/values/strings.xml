@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Español Coach</string>
+    <string name="title_activity_main">Español Coach</string>
+    <string name="package_name">mx.espanolcoach.app</string>
+    <string name="custom_url_scheme">mx.espanolcoach.app</string>
+</resources>
