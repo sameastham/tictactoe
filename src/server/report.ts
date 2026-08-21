@@ -13,15 +13,28 @@ import type { TaxonomyTag } from "@/lib/taxonomy";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RECURRENCE_WINDOW_MS = 30 * DAY_MS;
 const DICTATION_WINDOW_MS = 30 * DAY_MS;
-const TRANSFER_MIN_GAP_MS = DAY_MS;
+/**
+ * Minimum gap between an item's capture and its next appearance in
+ * production for that appearance to count as "transfer" rather than the
+ * learner echoing back the very sentence they just captured it from.
+ * Exported so `src/server/mastery.ts` can apply the identical gap when
+ * deriving unprompted-production signals for item mastery (plan §5) —
+ * one shared policy instead of two competing constants.
+ */
+export const TRANSFER_MIN_GAP_MS = DAY_MS;
 
 /** UTC calendar-day key (YYYY-MM-DD) — used to count distinct active days without pulling in a timezone library. */
 function dayKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** trim + collapse whitespace + lowercase, for substring "did this chunk show up in their production" matching. */
-function normalizeForMatch(s: string): string {
+/**
+ * trim + collapse whitespace + lowercase, for substring "did this chunk show
+ * up in their production" matching. Exported so `src/server/mastery.ts`
+ * reuses this exact matching rule for its own production-text scans instead
+ * of re-implementing it.
+ */
+export function normalizeForMatch(s: string): string {
   return s.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
@@ -78,7 +91,15 @@ function computeTransfer(db: Db): { count: number; chunks: string[] } {
   return { count: chunks.length, chunks };
 }
 
-function computeRecurrence(db: Db, now: Date): { tag: TaxonomyTag; count: number; prevCount: number }[] {
+/**
+ * Per-taxonomy `produced_error` counts, this 30-day window vs. the 30 days
+ * before that. Exported so `src/server/mastery.ts` reuses this exact
+ * current-vs-previous window comparison for its category `errorCount30d` and
+ * `trend` (up/down/flat) instead of re-deriving it — the report page's own
+ * `TrendBadge` (up/down/flat by `count` vs `prevCount`) is the presentation
+ * this feeds in both places.
+ */
+export function computeRecurrence(db: Db, now: Date): { tag: TaxonomyTag; count: number; prevCount: number }[] {
   const windowStart = new Date(now.getTime() - RECURRENCE_WINDOW_MS);
   const prevWindowStart = new Date(now.getTime() - 2 * RECURRENCE_WINDOW_MS);
 

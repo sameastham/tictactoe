@@ -7,6 +7,7 @@ import { events } from "@/db/schema";
 import { DEFAULT_USER_ID } from "@/lib/ids";
 import { LearnerBlockSchema, type LearnerBlock } from "@/lib/contracts";
 import { TAXONOMY, type TaxonomyTag } from "@/lib/taxonomy";
+import { deriveBlocking } from "@/server/mastery";
 import { deriveRecentErrorTagCounts, getDueItems, topWeakCategories } from "@/server/scheduler";
 
 const LearnerConfigSchema = z.object({
@@ -45,16 +46,20 @@ const WEAK_CATEGORY_EVENT_THRESHOLD = 5;
 /**
  * `weak_categories` for the learner block: once at least
  * {@link WEAK_CATEGORY_EVENT_THRESHOLD} `produced_error` events exist in the
- * last 30 days, the derived top-3 tags by frequency (reusing the scheduler's
- * own counting — see `deriveRecentErrorTagCounts` in `src/server/scheduler.ts`
- * — rather than re-querying the log here); otherwise the static
- * `config/learner.json` fallback, same posture as the scheduler's own
- * weak-category bucket.
+ * last 30 days, prefer the mastery model's own ranked "blocking" tags
+ * (`deriveBlocking`, `src/server/mastery.ts`) — negative-evidence-and-recency
+ * ranked, so it agrees with what the `/profile` page's "Qué te está
+ * frenando" headline shows; if that comes back empty for some reason, fall
+ * back to the plain frequency-derived top-3 (reusing the scheduler's own
+ * counting — see `deriveRecentErrorTagCounts` in `src/server/scheduler.ts`).
+ * Below the threshold, the static `config/learner.json` fallback, same
+ * posture as the scheduler's own weak-category bucket.
  */
 function deriveWeakCategories(db: Db): TaxonomyTag[] {
   const { counts, total } = deriveRecentErrorTagCounts(db);
   if (total >= WEAK_CATEGORY_EVENT_THRESHOLD) {
-    return topWeakCategories(counts);
+    const blockingTags = deriveBlocking(db).map((entry) => entry.tag);
+    return blockingTags.length > 0 ? blockingTags : topWeakCategories(counts);
   }
   return loadLearnerConfig().weak_categories;
 }

@@ -2,7 +2,7 @@
  * Spanish display labels for enum-ish values used across the UI. Client-safe:
  * no `fs`, no db.
  */
-import type { Register, Rung } from "@/lib/taxonomy";
+import type { MasteryBand, Register, Rung } from "@/lib/taxonomy";
 import type { TaxonomyTag } from "@/lib/taxonomy";
 import type { DictationMissClass } from "@/lib/contracts";
 
@@ -96,4 +96,25 @@ export const MISS_CLASS_LABELS: Record<DictationMissClass, string> = {
   reduction: "Reducción",
   proper_noun: "Nombre propio",
   near_miss: "Casi",
+};
+
+/** Spanish labels for the mastery model's bands (`MASTERY_BANDS`), low to high. */
+export const MASTERY_BAND_LABELS: Record<MasteryBand, string> = {
+  fragil: "Frágil",
+  en_progreso: "En progreso",
+  solido: "Sólido",
+};
+
+/**
+ * Full Tailwind class strings for a mastery band's chip, keyed by band —
+ * same written-out-in-full rationale as `REGISTER_CHIP_CLASSES`/
+ * `RUNG_CHIP_CLASSES` above. Deliberately reuses the app's existing
+ * danger/amber/kept semantic tokens (not a new palette) so "frágil" reads
+ * with the same weight as an "incorrect" rung and "sólido" the same as
+ * "natural" — one consistent low/mid/high vocabulary across the app.
+ */
+export const MASTERY_BAND_CHIP_CLASSES: Record<MasteryBand, string> = {
+  fragil: "border-danger-border bg-danger-bg text-danger-fg",
+  en_progreso: "border-amber-border bg-amber-bg text-amber-fg",
+  solido: "border-kept-border bg-kept-bg text-kept-fg",
 };

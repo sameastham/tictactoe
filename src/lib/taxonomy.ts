@@ -49,3 +49,14 @@ export type Surface = (typeof SURFACES)[number];
 /** CEFR proficiency levels used to rate content difficulty. */
 export const CEFR_LEVELS = ["A2", "B1", "B2", "C1", "C2"] as const;
 export type CefrLevel = (typeof CEFR_LEVELS)[number];
+
+/**
+ * Mastery bands (learner mastery model v1, `src/server/mastery.ts`), low to
+ * high: "fragil" (not yet reliable — too few positive signals, or a low
+ * decayed score), "en_progreso" (some reliable signal, not yet consistent),
+ * "solido" (consistent, decay-resistant signal). Deliberately qualitative,
+ * never a percentage — see CLAUDE.md/founding plan §5: no naturalness-ladder
+ * style number is surfaced for mastery, only these bands.
+ */
+export const MASTERY_BANDS = ["fragil", "en_progreso", "solido"] as const;
+export type MasteryBand = (typeof MASTERY_BANDS)[number];

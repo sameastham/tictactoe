@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getDb } from "@/db";
 import { buildWeeklyReport, type WeeklyReport } from "@/server/report";
 import { MISS_CLASS_LABELS, TAXONOMY_LABELS } from "@/lib/labels";
@@ -42,8 +43,15 @@ export default function ReportPage() {
   return (
     <div className="min-h-dvh">
       <header className="px-4 pt-6 pb-2">
-        <h1 className="text-2xl font-bold tracking-tight">Reporte</h1>
-        <p className="mt-0.5 text-sm text-ink-muted">Tu progreso de la semana</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Reporte</h1>
+            <p className="mt-0.5 text-sm text-ink-muted">Tu progreso de la semana</p>
+          </div>
+          <Link href="/profile" data-testid="link-to-profile" className="shrink-0 pt-1 text-sm font-semibold text-accent">
+            Perfil →
+          </Link>
+        </div>
       </header>
 
       <main className="flex flex-col gap-4 px-4 pb-28 pt-4">
