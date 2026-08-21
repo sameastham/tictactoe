@@ -277,6 +277,10 @@ export function recordDecision(db: Db, input: RecordDecisionInput): { itemId?: s
 export type CreateSessionInput = {
   surface: Surface;
   contentId?: string | null;
+  /** Talk-only: the seeded conversation topic (see `seedTopic` in `src/server/talk.ts`). */
+  topic?: string | null;
+  /** Talk-only: the due items seeded alongside `topic`, reused as `judge`'s `target_items` at end-of-session. */
+  seedItems?: JudgeTargetItem[] | null;
 };
 
 /** Starts a new practice session and returns the persisted row. */
@@ -287,6 +291,8 @@ export function createSession(db: Db, data: CreateSessionInput): SessionRow {
     userId: DEFAULT_USER_ID,
     surface: data.surface,
     contentId: data.contentId ?? null,
+    topic: data.topic ?? null,
+    seedItems: data.seedItems ?? null,
     startedAt: now,
     endedAt: null,
     durationS: null,
@@ -294,6 +300,25 @@ export function createSession(db: Db, data: CreateSessionInput): SessionRow {
   };
   db.insert(sessions).values(row).run();
   return db.select().from(sessions).where(eq(sessions.id, row.id)).get()!;
+}
+
+/** Fetches a single session row by id, or undefined if it doesn't exist. */
+export function getSession(db: Db, id: string): SessionRow | undefined {
+  return db.select().from(sessions).where(eq(sessions.id, id)).get();
+}
+
+/** Lists sessions on a given surface, most recently started first. */
+export function listSessionsBySurface(db: Db, surface: Surface, limit = 20): SessionRow[] {
+  return db.select().from(sessions).where(eq(sessions.surface, surface)).orderBy(desc(sessions.startedAt)).limit(limit).all();
+}
+
+/**
+ * Stamps a session as ended (`endedAt`/`durationS`). A plain update —
+ * `sessions` is not part of the append-only event log, unlike `events`
+ * itself; see `endTalk` in `src/server/talk.ts`, the only caller today.
+ */
+export function endSession(db: Db, sessionId: string, endedAt: Date, durationS: number): void {
+  db.update(sessions).set({ endedAt, durationS }).where(eq(sessions.id, sessionId)).run();
 }
 
 // -----------------------------------------------------------------------------
@@ -331,6 +356,11 @@ export function getWriting(db: Db, id: string): WritingRow | undefined {
 /** Lists the most recently created writings. */
 export function listWritings(db: Db, limit = 20): WritingRow[] {
   return db.select().from(writings).orderBy(desc(writings.createdAt)).limit(limit).all();
+}
+
+/** The writing tied to a session (Talk's judged transcript — see `endTalk` in `src/server/talk.ts`), if any. */
+export function getWritingBySessionId(db: Db, sessionId: string): WritingRow | undefined {
+  return db.select().from(writings).where(eq(writings.sessionId, sessionId)).orderBy(desc(writings.createdAt)).get();
 }
 
 /**

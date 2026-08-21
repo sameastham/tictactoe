@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { content } from "@/db/schema";
 import { logModelCall } from "@/server/repo";
 import {
+  ConverseResultSchema,
   ExtractResultSchema,
   JudgeWireResultSchema,
   type ConverseInput,
@@ -16,13 +17,16 @@ import {
   type JudgedSentenceWire,
   type LearnerBlock,
 } from "@/lib/contracts";
-import { EXTRACT_PROMPT_VERSION, JUDGE_PROMPT_VERSION, loadPrompt, renderPrompt } from "@/server/language/prompts";
+import {
+  CONVERSE_PROMPT_VERSION,
+  EXTRACT_PROMPT_VERSION,
+  JUDGE_PROMPT_VERSION,
+  loadPrompt,
+  renderPrompt,
+} from "@/server/language/prompts";
 import { computeCostUsd } from "@/server/language/pricing";
 import { getProvider } from "@/server/language/providers";
 import { ProviderError, type ModelJsonResponse, type ModelProvider } from "@/server/language/providers/provider";
-
-/** Thrown by prompts that are speced but not yet implemented (judge, converse). */
-export class NotImplementedError extends Error {}
 
 /**
  * The single entry point for every model call in the app. Nothing outside
@@ -35,7 +39,7 @@ export interface LanguageService {
     opts?: { contentId?: string },
   ): Promise<{ result: ExtractResult; model: string }>;
   judge(input: JudgeInput, learner: LearnerBlock): Promise<{ result: JudgeResult; model: string }>;
-  converse(input: ConverseInput, learner: LearnerBlock): Promise<ConverseResult>;
+  converse(input: ConverseInput, learner: LearnerBlock): Promise<{ result: ConverseResult; model: string }>;
 }
 
 /** trim + collapse all whitespace runs to a single space. */
@@ -283,8 +287,66 @@ export function createLanguageService(deps: { db: Db; provider: ModelProvider })
     return { result, model: response.model };
   }
 
-  async function converse(_input: ConverseInput, _learner: LearnerBlock): Promise<ConverseResult> {
-    throw new NotImplementedError("converse is not implemented yet — see prompts/ and §4.2 of the plan");
+  /** Logs one model_calls row for the converse purpose, success or failure. */
+  function recordConverseCall(params: {
+    ok: boolean;
+    error?: string | null;
+    response?: ModelJsonResponse<ConverseResult>;
+    durationMs: number;
+  }): void {
+    const { ok, error = null, response, durationMs } = params;
+    const usage = response?.usage ?? {
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    };
+    const model = response?.model ?? process.env.MODEL_ID ?? "unknown";
+
+    logModelCall(db, {
+      purpose: "converse",
+      provider: provider.name,
+      model,
+      promptVersion: CONVERSE_PROMPT_VERSION,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cacheReadTokens: usage.cacheReadTokens,
+      cacheWriteTokens: usage.cacheWriteTokens,
+      costUsd: response ? computeCostUsd(model, usage) : 0,
+      durationMs,
+      ok,
+      error,
+      contentId: null,
+    });
+  }
+
+  async function converse(
+    input: ConverseInput,
+    learner: LearnerBlock,
+  ): Promise<{ result: ConverseResult; model: string }> {
+    const prompt = renderPrompt(loadPrompt("converse", CONVERSE_PROMPT_VERSION).text, learner);
+    const userMessage = JSON.stringify({ topic: input.topic, messages: input.messages });
+
+    const startedAt = Date.now();
+    let response: ModelJsonResponse<ConverseResult>;
+    try {
+      response = await provider.completeJson({
+        purpose: "converse",
+        system: prompt,
+        user: userMessage,
+        schema: ConverseResultSchema,
+        maxTokens: 2000,
+      });
+    } catch (error) {
+      const durationMs = Date.now() - startedAt;
+      const message = error instanceof Error ? error.message : String(error);
+      recordConverseCall({ ok: false, error: message, durationMs });
+      throw error;
+    }
+    const durationMs = Date.now() - startedAt;
+
+    recordConverseCall({ ok: true, response, durationMs });
+    return { result: response.data, model: response.model };
   }
 
   return { extract, judge, converse };

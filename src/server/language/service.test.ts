@@ -4,11 +4,11 @@ import { describe, expect, it } from "vitest";
 import { createTestDb, type Db } from "@/db";
 import { modelCalls } from "@/db/schema";
 import { createContent } from "@/server/repo";
-import type { ExtractInput, JudgeInput, JudgeWireResult, LearnerBlock } from "@/lib/contracts";
-import { EXTRACT_PROMPT_VERSION, JUDGE_PROMPT_VERSION } from "@/server/language/prompts";
+import type { ConverseInput, ExtractInput, JudgeInput, JudgeWireResult, LearnerBlock } from "@/lib/contracts";
+import { CONVERSE_PROMPT_VERSION, EXTRACT_PROMPT_VERSION, JUDGE_PROMPT_VERSION } from "@/server/language/prompts";
 import { FixtureProvider } from "@/server/language/providers/fixture";
 import { ProviderError, type ModelProvider } from "@/server/language/providers/provider";
-import { createLanguageService, NotImplementedError } from "@/server/language/service";
+import { createLanguageService } from "@/server/language/service";
 
 const ARTICLE_PATH = path.join(process.cwd(), "fixtures", "article-es-mx.txt");
 const articleText = fs.readFileSync(ARTICLE_PATH, "utf-8");
@@ -262,11 +262,45 @@ describe("LanguageService.judge — post-validation", () => {
   });
 });
 
-describe("LanguageService.converse", () => {
-  it("converse throws NotImplementedError without calling the provider", async () => {
+describe("LanguageService.converse — with FixtureProvider", () => {
+  it("returns the fixture's reply and logs a successful model_calls row", async () => {
     const db: Db = createTestDb();
     const service = createLanguageService({ db, provider: new FixtureProvider() });
+    const input: ConverseInput = { topic: "Platiquemos de tu semana.", messages: [] };
 
-    await expect(service.converse({ messages: [] }, makeLearner())).rejects.toThrow(NotImplementedError);
+    const { result, model } = await service.converse(input, makeLearner());
+
+    expect(model).toBe("fixture");
+    expect(typeof result.reply).toBe("string");
+    expect(result.reply.length).toBeGreaterThan(0);
+
+    const rows = db.select().from(modelCalls).all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ok).toBe(true);
+    expect(rows[0].provider).toBe("fixture");
+    expect(rows[0].purpose).toBe("converse");
+    expect(rows[0].costUsd).toBe(0);
+    expect(rows[0].promptVersion).toBe(CONVERSE_PROMPT_VERSION);
+    expect(rows[0].error).toBeNull();
+  });
+
+  it("logs a failed model_calls row and lets the error propagate on provider failure", async () => {
+    const db: Db = createTestDb();
+    const throwingProvider: ModelProvider = {
+      name: "stub-throw",
+      async completeJson() {
+        throw new ProviderError("boom: simulated converse failure", true);
+      },
+    };
+    const service = createLanguageService({ db, provider: throwingProvider });
+    const input: ConverseInput = { topic: "Un tema cualquiera.", messages: [] };
+
+    await expect(service.converse(input, makeLearner())).rejects.toThrow(/boom/);
+
+    const rows = db.select().from(modelCalls).all();
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ok).toBe(false);
+    expect(rows[0].purpose).toBe("converse");
+    expect(rows[0].error).toMatch(/boom/);
   });
 });

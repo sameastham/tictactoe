@@ -205,10 +205,51 @@ function synthesizeJudgeResult(input: FixtureJudgeInput): unknown {
   };
 }
 
+/** The user-message shape `LanguageService.converse` sends to every provider. */
+type FixtureConverseInput = {
+  topic: string;
+  messages: { role: "learner" | "tutor"; text: string }[];
+};
+
+/** Parses the converse user message. Malformed/missing fields degrade to empty rather than throwing. */
+function parseConverseUser(user: string): FixtureConverseInput {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(user);
+  } catch {
+    parsed = {};
+  }
+  const obj = (parsed && typeof parsed === "object" ? parsed : {}) as Record<string, unknown>;
+  const topic = typeof obj.topic === "string" ? obj.topic : "";
+  const messages = Array.isArray(obj.messages) ? (obj.messages as FixtureConverseInput["messages"]) : [];
+  return { topic, messages };
+}
+
+/**
+ * Five deterministic, generically-conversational Mexican-Spanish tutor
+ * replies, chosen by how many learner turns have happened so far
+ * (`replies[min(learnerTurnCount, 4)]`) — so a fixture conversation always
+ * plays out identically regardless of the actual seeded topic. Deliberately
+ * topic-agnostic: this fixture never reads `topic`, only `messages`. Each
+ * reply but the last ends with exactly one question, mirroring the converse
+ * prompt's own "one question max per reply" rule.
+ */
+const CONVERSE_REPLIES = [
+  "¡Qué gusto platicar contigo! Cuéntame, ¿qué es lo que más te llamó la atención de todo esto?",
+  "Órale, qué interesante lo que dices. ¿Y tú por qué crees que pasa así?",
+  "Pues fíjate que yo no lo veo tan claro — a mí me parece que es al revés. ¿No crees que también podría depender del contexto?",
+  "Espérame, no me quedó muy claro eso último. ¿Me lo puedes decir de otra manera?",
+  "Bueno, pues ya le dimos bastantes vueltas al tema. Me dio gusto escuchar cómo lo ves tú.",
+] as const;
+
+function converseFixtureReply(messages: FixtureConverseInput["messages"]): string {
+  const learnerTurnCount = messages.filter((m) => m.role === "learner").length;
+  return CONVERSE_REPLIES[Math.min(learnerTurnCount, CONVERSE_REPLIES.length - 1)];
+}
+
 /**
  * Deterministic, network-free model provider used in tests and local dev
- * without an API key. Implements "extract" and "judge"; "converse" is not
- * yet implemented anywhere in the app and still throws.
+ * without an API key. Implements "extract", "judge", and "converse".
  */
 export class FixtureProvider implements ModelProvider {
   readonly name = "fixture";
@@ -246,6 +287,24 @@ export class FixtureProvider implements ModelProvider {
       const usage: ModelUsage = {
         inputTokens: Math.ceil(req.user.length / 4),
         outputTokens: 400,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      };
+
+      return { data, model: "fixture", usage };
+    }
+
+    if (req.purpose === "converse") {
+      const input = parseConverseUser(req.user);
+      const raw = { reply: converseFixtureReply(input.messages) };
+
+      // Always validate against the caller's schema (ConverseResultSchema)
+      // so the fixture data can never silently drift from the app's contract.
+      const data = req.schema.parse(raw);
+
+      const usage: ModelUsage = {
+        inputTokens: Math.ceil(req.user.length / 4),
+        outputTokens: 60,
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
       };

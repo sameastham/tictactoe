@@ -1,7 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { ExtractResultSchema, JudgeWireResultSchema, type ExtractResult, type JudgeInput } from "@/lib/contracts";
+import {
+  ConverseResultSchema,
+  ExtractResultSchema,
+  JudgeWireResultSchema,
+  type ConverseInput,
+  type ExtractResult,
+  type JudgeInput,
+} from "@/lib/contracts";
 import { FixtureProvider } from "@/server/language/providers/fixture";
 import type { ModelJsonRequest } from "@/server/language/providers/provider";
 
@@ -25,6 +32,16 @@ function judgeRequest(input: JudgeInput) {
     user: JSON.stringify(input),
     schema: JudgeWireResultSchema,
     maxTokens: 16000,
+  };
+}
+
+function converseRequest(input: ConverseInput) {
+  return {
+    purpose: "converse" as const,
+    system: "system prompt (unused by the fixture provider)",
+    user: JSON.stringify(input),
+    schema: ConverseResultSchema,
+    maxTokens: 2000,
   };
 }
 
@@ -183,17 +200,52 @@ describe("FixtureProvider — judge — deterministic rules", () => {
   });
 });
 
-describe("FixtureProvider — converse", () => {
-  it("throws a non-retryable ProviderError for converse", async () => {
+describe("FixtureProvider — converse — deterministic by turn count", () => {
+  it("opens with reply[0] on an empty history", async () => {
     const provider = new FixtureProvider();
-    await expect(
-      provider.completeJson({
-        purpose: "converse",
-        system: "s",
-        user: "u",
-        schema: ExtractResultSchema,
-        maxTokens: 100,
+    const res = await provider.completeJson(converseRequest({ topic: "Un tema", messages: [] }));
+    expect(res.data.reply).toBe(
+      "¡Qué gusto platicar contigo! Cuéntame, ¿qué es lo que más te llamó la atención de todo esto?",
+    );
+    expect(res.model).toBe("fixture");
+  });
+
+  it("picks reply[min(learnerTurnCount, 4)], counting only learner-role turns", async () => {
+    const provider = new FixtureProvider();
+
+    const oneLearnerTurn = await provider.completeJson(
+      converseRequest({
+        topic: "Un tema",
+        messages: [
+          { role: "tutor", text: "Hola, ¿cómo estás?" },
+          { role: "learner", text: "Bien, gracias." },
+        ],
       }),
-    ).rejects.toThrow(/does not implement converse/);
+    );
+    expect(oneLearnerTurn.data.reply).toBe("Órale, qué interesante lo que dices. ¿Y tú por qué crees que pasa así?");
+
+    const fiveLearnerTurns = await provider.completeJson(
+      converseRequest({
+        topic: "Un tema",
+        messages: Array.from({ length: 5 }, (_, i) => ({ role: "learner" as const, text: `mensaje ${i}` })),
+      }),
+    );
+    expect(fiveLearnerTurns.data.reply).toBe(
+      "Bueno, pues ya le dimos bastantes vueltas al tema. Me dio gusto escuchar cómo lo ves tú.",
+    );
+  });
+
+  it("is deterministic across two identical calls, and ignores topic entirely", async () => {
+    const provider = new FixtureProvider();
+    const messages = [{ role: "learner" as const, text: "Algo" }];
+    const a = await provider.completeJson(converseRequest({ topic: "Tema A", messages }));
+    const b = await provider.completeJson(converseRequest({ topic: "Tema totalmente distinto", messages }));
+    expect(a.data).toEqual(b.data);
+  });
+
+  it("is schema-valid against ConverseResultSchema", async () => {
+    const provider = new FixtureProvider();
+    const res = await provider.completeJson(converseRequest({ topic: "Un tema", messages: [] }));
+    expect(() => ConverseResultSchema.parse(res.data)).not.toThrow();
   });
 });

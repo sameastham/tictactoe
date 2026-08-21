@@ -113,6 +113,7 @@ export type JudgeResult = z.infer<typeof JudgeResultSchema>;
 
 /** Input to the conversational tutor model call. */
 export const ConverseInputSchema = z.object({
+  topic: z.string(),
   messages: z.array(z.object({ role: z.enum(["learner", "tutor"]), text: z.string() })),
 });
 export type ConverseInput = z.infer<typeof ConverseInputSchema>;
@@ -334,3 +335,42 @@ export const CaptureMissBodySchema = z.object({
   chunk: z.string(),
 });
 export type CaptureMissBody = z.infer<typeof CaptureMissBodySchema>;
+
+// -----------------------------------------------------------------------------
+// Talk surface
+// -----------------------------------------------------------------------------
+
+/** Body of "start a Talk session" (POST /api/talk/start) — empty: the topic is server-seeded, never client-chosen. */
+export const TalkStartBodySchema = z.object({});
+export type TalkStartBody = z.infer<typeof TalkStartBodySchema>;
+
+/** Body of "send a Talk message" (POST /api/talk/message). */
+export const TalkMessageBodySchema = z.object({
+  sessionId: z.string(),
+  text: z.string().min(1).max(1000),
+});
+export type TalkMessageBody = z.infer<typeof TalkMessageBodySchema>;
+
+/** Body of "end a Talk session" (POST /api/talk/end). */
+export const TalkEndBodySchema = z.object({
+  sessionId: z.string(),
+});
+export type TalkEndBody = z.infer<typeof TalkEndBodySchema>;
+
+/**
+ * Post-session Talk report: evaluation runs asynchronously after the
+ * conversation ends (never mid-chat), and this is its full shape — the
+ * judged transcript, which target items came up and which didn't, and up to
+ * three concrete practice pointers derived from the judgment's issue tags.
+ * `judgment` is `null` when the session ended with nothing to judge (no
+ * learner turns) or the judge call itself failed.
+ */
+export const TalkReportSchema = z.object({
+  sessionId: z.string(),
+  topic: z.string().nullable(),
+  judgment: JudgeResultSchema.nullable(),
+  itemsUsed: z.array(z.string()),
+  itemsAvoided: z.array(z.string()),
+  practiceNext: z.array(z.string()).max(3),
+});
+export type TalkReport = z.infer<typeof TalkReportSchema>;

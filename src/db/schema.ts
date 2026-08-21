@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { CEFR_LEVELS, EVENT_TYPES, REGISTERS, SURFACES, TAXONOMY, type TaxonomyTag } from "@/lib/taxonomy";
-import type { EventPayload, JudgeResult, StoredExtraction, WordTimestamp } from "@/lib/contracts";
+import type { EventPayload, JudgeResult, JudgeTargetItem, StoredExtraction, WordTimestamp } from "@/lib/contracts";
 
 /** A piece of source content (article/paste/audio/video) the learner consumed. */
 export const content = sqliteTable(
@@ -46,7 +46,15 @@ export const items = sqliteTable(
   ],
 );
 
-/** A practice session on a given surface, optionally tied to a piece of content. */
+/**
+ * A practice session on a given surface, optionally tied to a piece of
+ * content. `topic`/`seedItems` are Talk-only (null on every other surface):
+ * the topic string `seedTopic` derived at session start, and the due items
+ * offered as `judge`'s `target_items` when the session is later ended (see
+ * `src/server/talk.ts`) — persisted here rather than re-derived at end time
+ * so a report always reflects what was actually seeded, not whatever
+ * happens to be due later.
+ */
 export const sessions = sqliteTable(
   "sessions",
   {
@@ -54,12 +62,35 @@ export const sessions = sqliteTable(
     userId: text("user_id").notNull(),
     surface: text("surface", { enum: SURFACES }).notNull(),
     contentId: text("content_id").references(() => content.id),
+    topic: text("topic"),
+    seedItems: text("seed_items", { mode: "json" }).$type<JudgeTargetItem[]>(),
     startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
     endedAt: integer("ended_at", { mode: "timestamp_ms" }),
     durationS: integer("duration_s"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [index("sessions_user_started_idx").on(table.userId, table.startedAt)],
+);
+
+/**
+ * One turn (learner or tutor) within a Talk session. Append-only, same
+ * posture as `events`: no update/delete is exposed anywhere (see
+ * `src/server/talk.ts`) — a correction would be a new turn, never an edit of
+ * one already sent.
+ */
+export const talkTurns = sqliteTable(
+  "talk_turns",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => sessions.id),
+    role: text("role", { enum: ["learner", "tutor"] }).notNull(),
+    text: text("text").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [index("talk_turns_session_created_idx").on(table.sessionId, table.createdAt)],
 );
 
 /** A learner-produced piece of writing (Fix surface), and the judge's verdict on it once judged. */

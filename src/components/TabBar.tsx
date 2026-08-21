@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-/** Immersive detail views (reading, results, dictation) hide the tab bar entirely. */
+/** Immersive detail views (reading, results, dictation, active chat) hide the tab bar entirely. */
 function isHidden(pathname: string): boolean {
   if (pathname.startsWith("/read/")) return true;
   if (pathname.startsWith("/fix/") && pathname !== "/fix/write") return true;
   if (pathname.startsWith("/listen/") && pathname !== "/listen/add") return true;
+  if (pathname.startsWith("/talk/")) return true;
   return false;
 }
 
@@ -80,19 +81,33 @@ function HeadphonesIcon({ active }: { active: boolean }) {
   );
 }
 
+function ChatIcon({ active }: { active: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+      <path
+        d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.5 4v-4H6.5A2.5 2.5 0 0 1 4 13.5v-7Z"
+        stroke="currentColor"
+        strokeWidth={active ? 2 : 1.6}
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 const TABS = [
   { href: "/", label: "Leer", icon: BookIcon, testId: "tab-leer" },
   { href: "/fix", label: "Escribir", icon: PencilIcon, testId: "tab-escribir" },
   { href: "/listen", label: "Escuchar", icon: HeadphonesIcon, testId: "tab-escuchar" },
+  { href: "/talk", label: "Hablar", icon: ChatIcon, testId: "tab-hablar" },
 ] as const;
 
 /**
- * Fixed bottom tab bar (Leer / Escribir / Escuchar). Rendered inside a
- * full-viewport-width fixed wrapper, then re-centered to a max-w-md inner
- * column — same escape-the-ancestor-column technique as `FabWrapper` on the
- * home page, for the same reason (position:fixed ignores body's own
+ * Fixed bottom tab bar (Leer / Escribir / Escuchar / Hablar). Rendered
+ * inside a full-viewport-width fixed wrapper, then re-centered to a max-w-md
+ * inner column — same escape-the-ancestor-column technique as `FabWrapper`
+ * on the home page, for the same reason (position:fixed ignores body's own
  * `max-w-md`). Hidden on immersive detail views (`/read/[id]`, `/fix/[id]`,
- * `/listen/[id]`).
+ * `/listen/[id]`, `/talk/[sessionId]`).
  */
 export function TabBar() {
   const pathname = usePathname();
