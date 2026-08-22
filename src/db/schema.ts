@@ -27,6 +27,10 @@ export const content = sqliteTable(
     mediaPath: text("media_path"),
     difficulty: text("difficulty", { enum: CEFR_LEVELS }),
     extraction: text("extraction", { mode: "json" }).$type<StoredExtraction>(),
+    /** True for content ingested from a syllabus source (e.g. Dicho y hecho) rather than the learner's own Read/Listen surfaces — see `src/server/syllabus/ingest.ts`. */
+    didactic: integer("didactic", { mode: "boolean" }).notNull().default(false),
+    /** Set on didactic content: "{levelId}/{unitId}/{sectionId}", e.g. "dyh7/u4/s2". Null for learner-sourced content. */
+    syllabusRef: text("syllabus_ref"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [index("content_user_created_idx").on(table.userId, table.createdAt)],
@@ -45,6 +49,8 @@ export const items = sqliteTable(
     originSentence: text("origin_sentence").notNull(),
     why: text("why").notNull(),
     taxonomy: text("taxonomy", { mode: "json" }).$type<TaxonomyTag[]>(),
+    /** Set on construction-seeded items: "{levelId}/{unitId}", e.g. "dyh7/u4". Null for items captured through the ordinary Read/Listen/Fix/Talk surfaces. */
+    syllabusRef: text("syllabus_ref"),
     createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
   },
   (table) => [

@@ -33,7 +33,7 @@
  * known without a model call), so re-running it is not free the way the
  * other two are.
  */
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { Db } from "@/db";
 import { content, goldSet } from "@/db/schema";
 import { DEFAULT_USER_ID, newId } from "@/lib/ids";
@@ -67,12 +67,22 @@ function wordCount(s: string): number {
  * deduped by exact sentence text, in deterministic order: content
  * `createdAt` ascending, then sentence order within that content. No
  * randomness — same DB state always yields the same pool in the same order.
+ *
+ * Excludes `didactic: true` rows (syllabus-ingested textbook content — see
+ * `src/server/syllabus/ingest.ts`): both gold sets built from this pool
+ * (`buildNaturalControl`, `buildSeededErrors`) exist to measure the judge
+ * against real Mexican Spanish usage, and pedagogically engineered textbook
+ * prose (exercise sentences, gap-fills, grammar-box examples) is not a
+ * sample of that — it must not define the naturalness baseline. Contrast
+ * `isAttested` (`src/server/language/service.ts`), which deliberately KEEPS
+ * didactic content: a phrase attested in a textbook is still legitimate
+ * evidence that the phrase is real Spanish.
  */
 function buildSentencePool(db: Db): SentenceRef[] {
   const rows = db
     .select({ id: content.id, text: content.text, createdAt: content.createdAt })
     .from(content)
-    .where(eq(content.userId, DEFAULT_USER_ID))
+    .where(and(eq(content.userId, DEFAULT_USER_ID), eq(content.didactic, false)))
     .orderBy(asc(content.createdAt))
     .all();
 

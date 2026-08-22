@@ -245,6 +245,7 @@ export type EventPayload =
   | AdjudicatedPayload
   | ReviewedPayload
   | DictationMissPayload
+  | SyllabusAdvancedPayload
   | Record<string, unknown>;
 
 /** A model extraction result as persisted on a content row, with provenance. */
@@ -483,3 +484,62 @@ export const TalkReportSchema = z.object({
   fluency: FluencyAggregateSchema.nullable(),
 });
 export type TalkReport = z.infer<typeof TalkReportSchema>;
+
+// -----------------------------------------------------------------------------
+// Syllabus (Dicho y hecho curriculum) — see src/server/syllabus/config.ts
+// -----------------------------------------------------------------------------
+
+/** One section within a syllabus unit: its title and a tight paraphrase of the book's stated objectives. */
+export const SyllabusSectionSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  objectives: z.array(z.string()),
+});
+export type SyllabusSection = z.infer<typeof SyllabusSectionSchema>;
+
+/** A Fix-ready writing prompt derived from a unit's task-based goal, targeting one or more of the unit's constructions. */
+export const SyllabusTareaSchema = z.object({
+  id: z.string(),
+  /** Spanish, actionable writing task — passed straight to the Fix surface as `task`. */
+  prompt: z.string(),
+  targetConstructionIds: z.array(z.string()),
+});
+export type SyllabusTarea = z.infer<typeof SyllabusTareaSchema>;
+
+/** One grammatical construction/chunk the book explicitly teaches in a unit, mined from its grammar boxes and/or the grammar annex. */
+export const SyllabusConstructionSchema = z.object({
+  id: z.string(),
+  /** The construction as a capturable chunk, e.g. "por más que". */
+  chunk: z.string(),
+  description: z.string(),
+  tag: z.enum(TAXONOMY),
+});
+export type SyllabusConstruction = z.infer<typeof SyllabusConstructionSchema>;
+
+/** One unit of a syllabus level: its sections, target constructions, and Fix tareas. */
+export const SyllabusUnitSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  theme: z.string(),
+  sections: z.array(SyllabusSectionSchema),
+  constructions: z.array(SyllabusConstructionSchema),
+  tareas: z.array(SyllabusTareaSchema),
+});
+export type SyllabusUnit = z.infer<typeof SyllabusUnitSchema>;
+
+/** A full curriculum level (e.g. "dyh7") — one `config/syllabus/*.json` file validates against this. */
+export const SyllabusLevelSchema = z.object({
+  id: z.string(),
+  series: z.literal("dicho-y-hecho"),
+  name: z.string(),
+  cefr: z.string(),
+  units: z.array(SyllabusUnitSchema).min(1),
+});
+export type SyllabusLevel = z.infer<typeof SyllabusLevelSchema>;
+
+/** Payload of a `syllabus_advanced` event: the learner explicitly moved on to a new syllabus level/unit. */
+export const SyllabusAdvancedPayloadSchema = z.object({
+  level: z.string(),
+  unit: z.string(),
+});
+export type SyllabusAdvancedPayload = z.infer<typeof SyllabusAdvancedPayloadSchema>;

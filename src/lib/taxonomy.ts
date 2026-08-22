@@ -29,6 +29,7 @@ export const EVENT_TYPES = [
   "evaluator_disagreement",
   "reviewed",
   "item_avoided",
+  "syllabus_advanced",
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
 
