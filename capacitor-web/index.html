@@ -136,6 +136,10 @@
       button:active {
         opacity: 0.85;
       }
+
+      button + button {
+        margin-top: 10px;
+      }
     </style>
   </head>
   <body>
@@ -147,19 +151,24 @@
         <li>¿Está encendida la MacBook?</li>
         <li>¿Estás conectado a Tailscale?</li>
       </ul>
+      <button type="button" id="setup-button" onclick="openSetup()" style="display: none">
+        Configurar túnel Tailscale
+      </button>
       <button type="button" id="retry-button" onclick="retry()">Reintentar</button>
     </main>
     <script>
-      // This page doubles as two screens, distinguished by a ?state= query
+      // This page doubles as three screens, distinguished by a ?state= query
       // param the native side sets when it loads this page:
       //
       //   (no param, or state=offline) — the ORIGINAL behavior: Capacitor's
       //     own server.url load failed (no tunnel involved, or tunnel mode
-      //     is off). Reintentar just reloads, re-attempting server.url.
+      //     is off/unconfigured — this is exactly what a fresh install hits
+      //     first). Reintentar just reloads, re-attempting server.url.
       //
       //   state=connecting — shown by MainActivity while the embedded
       //     Tailscale tunnel (TunnelManager) is bringing the node up.
-      //     Reintentar is hidden; there's nothing to retry yet.
+      //     Reintentar and Configurar túnel are both hidden; there's
+      //     nothing to retry or (re)configure mid-attempt.
       //
       //   state=error&message=... — the tunnel came up and failed (bad auth
       //     key, hub unreachable, etc). `message` is shown verbatim below
@@ -167,12 +176,25 @@
       //     the AndroidTunnel JS interface (see MainActivity.kt) rather
       //     than a plain reload, which wouldn't restart the tsnet login
       //     attempt on its own.
+      //
+      // "Configurar túnel" is shown in both the "offline" and "error"
+      // states — this is the fix for the UX gap where a first-time install
+      // lands on the plain "offline" screen with no visible path to tunnel
+      // setup beyond an undiscoverable long-press. It calls
+      // AndroidTunnel.openSetup() (installed unconditionally by
+      // MainActivity, not just once tunnel mode is on) and hides itself
+      // whenever that interface isn't present — a plain browser opening
+      // this file directly, for instance.
       (function () {
         var params = new URLSearchParams(location.search);
         var state = params.get("state") || "offline";
         var statusEl = document.getElementById("status");
         var hintsEl = document.getElementById("hints");
         var retryButton = document.getElementById("retry-button");
+        var setupButton = document.getElementById("setup-button");
+        var hasSetupBridge = !!(
+          window.AndroidTunnel && typeof window.AndroidTunnel.openSetup === "function"
+        );
 
         if (state === "connecting") {
           statusEl.textContent = "Conectando por el túnel…";
@@ -187,20 +209,32 @@
             "<li>¿Es correcta la clave de autenticación?</li>" +
             "<li>¿Es correcto el host:puerto del hub?</li>" +
             "<li>Mantén presionada la pantalla para abrir los ajustes del túnel.</li>";
+          if (hasSetupBridge) setupButton.style.display = "block";
+        } else {
+          // "offline": leave the original status/hints copy as-is, but
+          // still offer the tunnel-setup path — see the comment above.
+          if (hasSetupBridge) setupButton.style.display = "block";
         }
-        // else "offline": leave the original copy as-is.
       })();
 
       function retry() {
         // Tunnel mode: AndroidTunnel is a JS interface MainActivity installs
-        // (addJavascriptInterface) only while tunnel mode is enabled — call
-        // it so Reintentar actually retriggers TunnelManager.connect().
+        // — call it so Reintentar actually retriggers TunnelManager.connect().
         // No-tunnel fallback (or a non-Android context): plain reload,
         // which re-attempts the static server.url as it always has.
         if (window.AndroidTunnel && typeof window.AndroidTunnel.retry === "function") {
           window.AndroidTunnel.retry();
         } else {
           location.reload();
+        }
+      }
+
+      function openSetup() {
+        // The button that calls this is only ever shown once hasSetupBridge
+        // is confirmed true above, so this is unreachable without the
+        // interface present — no reload/no-op fallback needed here.
+        if (window.AndroidTunnel && typeof window.AndroidTunnel.openSetup === "function") {
+          window.AndroidTunnel.openSetup();
         }
       }
     </script>

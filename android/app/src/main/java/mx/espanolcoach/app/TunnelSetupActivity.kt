@@ -2,6 +2,7 @@ package mx.espanolcoach.app
 
 import android.os.Bundle
 import android.text.InputType
+import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -10,6 +11,7 @@ import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -32,9 +34,22 @@ import kotlinx.coroutines.launch
  * plaintext once saved) and never re-displayed. Once connected, tsnet's own
  * persisted node identity (under filesDir/tsstate) re-authenticates on
  * every later launch, so this screen offers "Borrar clave" to clear it.
+ *
+ * When launched with [EXTRA_AUTO_FINISH_ON_CONNECT] true (MainActivity sets
+ * this for the first-launch chooser and the fallback page's "Configurar
+ * túnel" button — both error-recovery entry points, not a deliberate visit
+ * to settings), this screen finishes itself the moment the tunnel reaches
+ * `TunnelState.Up`, handing control straight back to MainActivity, which is
+ * independently collecting the same [TunnelManager.state] and loads the app
+ * at that point (see MainActivity's class doc comment).
  */
 class TunnelSetupActivity : AppCompatActivity() {
     private val uiScope = CoroutineScope(Dispatchers.Main + Job())
+    private var autoFinishOnConnect = false
+
+    companion object {
+        const val EXTRA_AUTO_FINISH_ON_CONNECT = "auto_finish_on_connect"
+    }
 
     private lateinit var enabledSwitch: Switch
     private lateinit var authKeyField: EditText
@@ -47,6 +62,7 @@ class TunnelSetupActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         title = "Túnel"
+        autoFinishOnConnect = intent.getBooleanExtra(EXTRA_AUTO_FINISH_ON_CONNECT, false)
         setContentView(buildUi())
         loadExisting()
         observeState()
@@ -65,10 +81,24 @@ class TunnelSetupActivity : AppCompatActivity() {
             setPadding(0, dp(20), 0, dp(4))
         }
 
-        root.addView(TextView(this).apply {
+        val titleRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        titleRow.addView(TextView(this).apply {
             text = "Túnel Tailscale integrado"
             textSize = 20f
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         })
+        titleRow.addView(Button(this).apply {
+            text = "?"
+            contentDescription = "Ayuda: cómo configurar el túnel"
+            minWidth = 0
+            minimumWidth = 0
+            setPadding(dp(14), dp(4), dp(14), dp(4))
+            setOnClickListener { showHelp() }
+        })
+        root.addView(titleRow)
         root.addView(TextView(this).apply {
             text = "Conecta esta app directamente a la MacBook por Tailscale, " +
                 "sin instalar la app de Tailscale por separado."
@@ -164,8 +194,39 @@ class TunnelSetupActivity : AppCompatActivity() {
                     is TunnelState.Up -> "Conectado: ${state.baseUrl}"
                     is TunnelState.Failed -> "Error: ${state.message}"
                 }
+                // See EXTRA_AUTO_FINISH_ON_CONNECT's doc comment above: only
+                // the error-recovery entry points ask for this, so a
+                // deliberate visit to settings (long-press/options menu)
+                // isn't yanked away the instant a connection succeeds.
+                if (autoFinishOnConnect && state is TunnelState.Up) {
+                    finish()
+                }
             }
         }
+    }
+
+    /**
+     * Terse, Spanish, operator-facing recap of what's needed to fill in the
+     * two required fields above — mirrors README.md's "Embedded-Tailscale
+     * tunnel mode" section (auth-key requirements, hub host:port, the
+     * server having to be running) without duplicating its full detail.
+     */
+    private fun showHelp() {
+        AlertDialog.Builder(this)
+            .setTitle("Cómo configurar")
+            .setMessage(
+                "• Clave de autenticación: créala en la consola de Tailscale " +
+                    "(Ajustes → Keys). Debe ser \"Pre-authorized: Sí\" y llevar una " +
+                    "etiqueta (tag), p. ej. tag:espanol-phone — así no queda con " +
+                    "acceso a todo el tailnet.\n\n" +
+                    "• Host:puerto del hub: el nombre MagicDNS de la MacBook más " +
+                    "\":3000\" (ej. mbp-2019.tailnet-name.ts.net:3000). Consíguelo con " +
+                    "\"tailscale status\" en la MacBook.\n\n" +
+                    "• El servidor debe estar corriendo en la MacBook (\"npm run dev\") " +
+                    "para que el túnel tenga algo a lo cual conectarse."
+            )
+            .setPositiveButton("Entendido", null)
+            .show()
     }
 
     private fun onSaveClicked() {

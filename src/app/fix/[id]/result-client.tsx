@@ -73,7 +73,7 @@ export function ResultClient({ writingId, task, text, judgment, chunksById }: Re
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-line bg-paper/95 px-2 py-2 backdrop-blur">
+      <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-line bg-paper/95 px-2 py-2 backdrop-blur lg:px-6 lg:py-3">
         <Link
           href="/fix"
           aria-label="Volver"
@@ -84,7 +84,7 @@ export function ResultClient({ writingId, task, text, judgment, chunksById }: Re
         <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">Resultado</h1>
       </header>
 
-      <main className="flex-1 px-4 pb-28 pt-5">
+      <main className="flex-1 px-4 pb-28 pt-5 lg:mx-auto lg:max-w-3xl lg:px-10 lg:pb-16 lg:pt-8">
         {task && (
           <p className="mb-4 rounded-xl border border-line bg-paper-elevated px-4 py-3 text-sm text-ink-muted">
             <span className="font-semibold text-ink">Reto: </span>
@@ -160,7 +160,7 @@ function SentenceCard({
     <li
       data-testid="sentence-card"
       data-rung={sentence.rung}
-      className={`rounded-2xl border border-line ${RUNG_EDGE_CLASSES[sentence.rung]} border-l-4 bg-paper-elevated p-4 shadow-sm`}
+      className={`rounded-2xl border border-line ${RUNG_EDGE_CLASSES[sentence.rung]} border-l-4 bg-paper-elevated p-4 shadow-sm lg:p-5`}
     >
       <span
         data-testid="sentence-rung-badge"
@@ -169,40 +169,55 @@ function SentenceCard({
         {RUNG_LABELS[sentence.rung]}
       </span>
 
-      <p className="mt-2.5 text-[15px] leading-relaxed text-ink">
-        {segments.map((seg, j) =>
-          seg.kind === "text" ? (
-            <span key={j}>{seg.text}</span>
-          ) : (
-            <button
-              key={j}
-              type="button"
-              data-testid="issue-mark"
-              onClick={() => setExpandedIssue(expandedIssue === seg.issueIndex ? null : seg.issueIndex)}
-              className={
-                sentence.issues[seg.issueIndex].severity === "major"
-                  ? "candidate-mark rounded px-0.5 py-0.5 font-medium underline decoration-2 decoration-rung-incorrect-border underline-offset-4 bg-rung-incorrect-bg text-rung-incorrect-fg"
-                  : "candidate-mark rounded px-0.5 py-0.5 font-medium underline decoration-2 decoration-rung-acceptable-border underline-offset-4 bg-rung-acceptable-bg text-rung-acceptable-fg"
-              }
-            >
-              {seg.text}
-            </button>
-          ),
+      {/*
+        At `lg:`, when there's a `better_version`, this becomes a 2-column
+        grid — original left, better version right, same top edge
+        (`lg:items-start`) — with the issue detail (when expanded) placed as
+        its own full-width row below (`lg:col-span-2 lg:row-start-2`) via
+        explicit grid placement, not DOM reordering: the three children below
+        keep the exact same source order (sentence, issue detail, better
+        version) as the mobile-only markup this replaced, so mobile output —
+        no `lg:grid` on this wrapper below `lg:`, and grid-placement classes
+        that are no-ops without a grid ancestor — is byte-for-byte unchanged.
+      */}
+      <div className={sentence.better_version ? "mt-2.5 lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-6" : "mt-2.5"}>
+        <p className="text-[15px] leading-relaxed text-ink lg:col-start-1 lg:row-start-1">
+          {segments.map((seg, j) =>
+            seg.kind === "text" ? (
+              <span key={j}>{seg.text}</span>
+            ) : (
+              <button
+                key={j}
+                type="button"
+                data-testid="issue-mark"
+                onClick={() => setExpandedIssue(expandedIssue === seg.issueIndex ? null : seg.issueIndex)}
+                className={
+                  sentence.issues[seg.issueIndex].severity === "major"
+                    ? "candidate-mark rounded px-0.5 py-0.5 font-medium underline decoration-2 decoration-rung-incorrect-border underline-offset-4 bg-rung-incorrect-bg text-rung-incorrect-fg"
+                    : "candidate-mark rounded px-0.5 py-0.5 font-medium underline decoration-2 decoration-rung-acceptable-border underline-offset-4 bg-rung-acceptable-bg text-rung-acceptable-fg"
+                }
+              >
+                {seg.text}
+              </button>
+            ),
+          )}
+        </p>
+
+        {expandedIssue !== null && sentence.issues[expandedIssue] && (
+          <IssueDetail issue={sentence.issues[expandedIssue]} className="lg:col-span-2 lg:row-start-2" />
         )}
-      </p>
 
-      {expandedIssue !== null && sentence.issues[expandedIssue] && <IssueDetail issue={sentence.issues[expandedIssue]} />}
-
-      {sentence.better_version && <BetterVersion sentence={sentence} />}
+        {sentence.better_version && <BetterVersion sentence={sentence} />}
+      </div>
 
       <SentenceOverride writingId={writingId} sentenceIndex={index} />
     </li>
   );
 }
 
-function IssueDetail({ issue }: { issue: JudgeIssue }) {
+function IssueDetail({ issue, className = "" }: { issue: JudgeIssue; className?: string }) {
   return (
-    <div className="mt-3 rounded-lg border border-line bg-paper px-3 py-2.5 text-sm" data-testid="issue-detail">
+    <div className={`mt-3 rounded-lg border border-line bg-paper px-3 py-2.5 text-sm ${className}`} data-testid="issue-detail">
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
         <span className="rounded-full border border-line px-2 py-0.5 text-[11px] font-medium text-ink-muted">
           {TAXONOMY_LABELS[issue.tag]}
@@ -223,7 +238,7 @@ function BetterVersion({ sentence }: { sentence: JudgedSentence }) {
   if (!sentence.better_version) return null;
   return (
     <div
-      className="mt-3 rounded-lg border border-accent/25 bg-accent-soft px-3 py-2.5 text-sm text-ink"
+      className="mt-3 rounded-lg border border-accent/25 bg-accent-soft px-3 py-2.5 text-sm text-ink lg:col-start-2 lg:row-start-1 lg:mt-0"
       data-testid="better-version"
     >
       <div className="mb-1 flex items-center gap-2">

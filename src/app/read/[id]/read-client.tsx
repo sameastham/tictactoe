@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import type { Candidate, StoredExtraction } from "@/lib/contracts";
 import { anchorCandidates, buildParagraphSegments } from "@/lib/anchors";
 import { CandidateSheet } from "@/components/CandidateSheet";
+import { CandidateDetail } from "@/components/CandidateDetail";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 
 export type Decision = "keep" | "discard";
 
@@ -57,6 +59,11 @@ function chipClasses(decision: Decision | undefined): string {
 
 export function ReadClient({ contentId, title, text, initialExtraction, initialDecisions }: ReadClientProps) {
   const router = useRouter();
+  // Decides sheet vs. panel mounting (not just CSS visibility) — see
+  // `useMediaQuery`'s doc comment. SSR/first paint always renders the
+  // mobile sheet branch; this flips to the desktop panel branch after
+  // mount on a `lg:` viewport.
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
   const [extraction, setExtraction] = useState(initialExtraction);
   const [decisions, setDecisions] = useState(initialDecisions);
   const [activeCandidateId, setActiveCandidateId] = useState<string | null>(null);
@@ -146,6 +153,8 @@ export function ReadClient({ contentId, title, text, initialExtraction, initialD
   const total = candidates.length;
   const decidedCount = candidates.filter((c) => decisions[c.id]).length;
   const allDecided = total > 0 && decidedCount === total;
+  const keptCount = Object.values(decisions).filter((d) => d === "keep").length;
+  const discardedCount = Object.values(decisions).filter((d) => d === "discard").length;
 
   if (!extraction) {
     return (
@@ -180,7 +189,7 @@ export function ReadClient({ contentId, title, text, initialExtraction, initialD
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-line bg-paper/95 px-2 py-2 backdrop-blur">
+      <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-line bg-paper/95 px-2 py-2 backdrop-blur lg:px-6 lg:py-3">
         <button
           type="button"
           onClick={() => router.back()}
@@ -189,7 +198,7 @@ export function ReadClient({ contentId, title, text, initialExtraction, initialD
         >
           <ChevronLeftIcon />
         </button>
-        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">{title ?? "Artículo"}</h1>
+        <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-ink lg:text-base">{title ?? "Artículo"}</h1>
         <span
           data-testid="decision-counter"
           className="mr-1 shrink-0 rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent-strong"
@@ -198,53 +207,82 @@ export function ReadClient({ contentId, title, text, initialExtraction, initialD
         </span>
       </header>
 
-      <main className="flex-1 px-5 pb-28 pt-6">
-        <article className="mx-auto max-w-[65ch] text-[17px] leading-[1.7] text-ink">
-          {paragraphs.map((segments, i) => (
-            <p key={i} className="mb-5">
-              {segments.map((seg, j) =>
-                seg.kind === "text" ? (
-                  <span key={j}>{seg.text}</span>
-                ) : (
-                  <button
-                    key={j}
-                    type="button"
-                    data-testid="candidate-mark"
-                    data-state={decisions[seg.candidateId] ?? "undecided"}
-                    data-candidate-id={seg.candidateId}
-                    className={markClasses(decisions[seg.candidateId])}
-                    onClick={() => setActiveCandidateId(seg.candidateId)}
-                  >
-                    {seg.text}
-                  </button>
-                ),
-              )}
-            </p>
-          ))}
-        </article>
+      <main className="flex-1 px-5 pb-28 pt-6 lg:flex lg:items-start lg:gap-10 lg:px-10 lg:pb-16 lg:pt-10">
+        <div className="lg:min-w-0 lg:flex-1">
+          <article className="mx-auto max-w-[65ch] text-[17px] leading-[1.7] text-ink lg:mx-0 lg:max-w-[72ch]">
+            {paragraphs.map((segments, i) => (
+              <p key={i} className="mb-5">
+                {segments.map((seg, j) =>
+                  seg.kind === "text" ? (
+                    <span key={j}>{seg.text}</span>
+                  ) : (
+                    <button
+                      key={j}
+                      type="button"
+                      data-testid="candidate-mark"
+                      data-state={decisions[seg.candidateId] ?? "undecided"}
+                      data-candidate-id={seg.candidateId}
+                      className={markClasses(decisions[seg.candidateId])}
+                      onClick={() => setActiveCandidateId(seg.candidateId)}
+                    >
+                      {seg.text}
+                    </button>
+                  ),
+                )}
+              </p>
+            ))}
+          </article>
 
-        {unanchoredCandidates.length > 0 && (
-          <section className="mx-auto mt-8 max-w-[65ch] border-t border-line pt-6">
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              También encontradas
-            </h2>
-            <div className="flex flex-wrap gap-2">
-              {unanchoredCandidates.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={chipClasses(decisions[c.id])}
-                  onClick={() => setActiveCandidateId(c.id)}
-                >
-                  {c.chunk}
-                </button>
-              ))}
+          {unanchoredCandidates.length > 0 && (
+            <section className="mx-auto mt-8 max-w-[65ch] border-t border-line pt-6 lg:mx-0 lg:max-w-[72ch]">
+              <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                También encontradas
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {unanchoredCandidates.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={chipClasses(decisions[c.id])}
+                    onClick={() => setActiveCandidateId(c.id)}
+                  >
+                    {c.chunk}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+
+        {/*
+          Desktop-only right panel — mounted (not just CSS-hidden) only once
+          `isDesktop` flips true post-mount, matching the mobile sheet's own
+          `!isDesktop` gate below. `lg:sticky` pins it under the sticky
+          header as the article scrolls; content is the same
+          `CandidateDetail` the mobile sheet renders, without `onClose` (see
+          that component's doc comment for what that changes).
+        */}
+        {isDesktop && (
+          <aside
+            data-testid="candidate-panel"
+            className="lg:sticky lg:top-20 lg:block lg:w-[360px] lg:shrink-0"
+          >
+            <div className="rounded-2xl border border-line bg-paper-elevated p-5 shadow-sm">
+              {activeCandidate ? (
+                <CandidateDetail
+                  candidate={activeCandidate}
+                  decision={decisions[activeCandidate.id]}
+                  onDecide={handleDecide}
+                />
+              ) : (
+                <EmptyPanel decidedCount={decidedCount} total={total} keptCount={keptCount} discardedCount={discardedCount} />
+              )}
             </div>
-          </section>
+          </aside>
         )}
       </main>
 
-      {activeCandidate && (
+      {!isDesktop && activeCandidate && (
         <CandidateSheet
           candidate={activeCandidate}
           decision={decisions[activeCandidate.id]}
@@ -252,6 +290,45 @@ export function ReadClient({ contentId, title, text, initialExtraction, initialD
           onDecide={handleDecide}
         />
       )}
+    </div>
+  );
+}
+
+/** "1 guardada" vs "2 guardadas" — Spanish plural agreement on the count noun. */
+function agree(count: number, singular: string, plural: string): string {
+  return count === 1 ? singular : plural;
+}
+
+/** Desktop panel's resting state: no candidate selected — a quiet hint plus a progress summary. */
+function EmptyPanel({
+  decidedCount,
+  total,
+  keptCount,
+  discardedCount,
+}: {
+  decidedCount: number;
+  total: number;
+  keptCount: number;
+  discardedCount: number;
+}) {
+  return (
+    <div data-testid="candidate-panel-empty" className="flex flex-col items-center gap-3 py-6 text-center">
+      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-accent-soft text-accent-strong">
+        <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+          <path
+            d="M5 5.5A1.5 1.5 0 0 1 6.5 4h9.17a1.5 1.5 0 0 1 1.06.44l2.83 2.83c.28.28.44.66.44 1.06V18.5A1.5 1.5 0 0 1 18.5 20h-12A1.5 1.5 0 0 1 5 18.5v-13Z"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+          />
+          <path d="M9 9.5h6M9 13h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        </svg>
+      </div>
+      <p className="text-sm text-ink-muted">Toca una frase resaltada</p>
+      <p className="text-xs text-ink-muted">
+        {decidedCount}/{total} · {keptCount} {agree(keptCount, "guardada", "guardadas")} ·{" "}
+        {discardedCount} {agree(discardedCount, "descartada", "descartadas")}
+      </p>
     </div>
   );
 }

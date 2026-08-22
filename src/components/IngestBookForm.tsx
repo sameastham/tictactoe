@@ -115,7 +115,7 @@ export function IngestBookForm({ levels, preselectedLevelId, onViewPlan }: Inges
   }
 
   return (
-    <form onSubmit={handleSubmit} data-testid="ingest-book-form" className="flex flex-col gap-5">
+    <form onSubmit={handleSubmit} data-testid="ingest-book-form" className="flex flex-col gap-5 lg:max-w-xl">
       <div className="flex flex-col gap-1.5">
         <label htmlFor="ingest-level" className="text-sm font-medium text-ink">
           Nivel
@@ -193,7 +193,7 @@ export function IngestBookForm({ levels, preselectedLevelId, onViewPlan }: Inges
 
 function IngestReportView({ report, onViewPlan }: { report: IngestReport; onViewPlan: () => void }) {
   return (
-    <div data-testid="ingest-report" className="flex flex-col gap-4">
+    <div data-testid="ingest-report" className="flex flex-col gap-4 lg:max-w-xl">
       <ul className="flex flex-col gap-2">
         {report.units.map((unit) => {
           const unfound = unit.constructions.filter((c) => c.status === "unfound").length;

@@ -27,20 +27,36 @@ export default function Home() {
 
   return (
     <div className="min-h-dvh">
-      <header className="px-4 pt-6 pb-2">
-        <h1 className="text-2xl font-bold tracking-tight">Español Coach</h1>
-        <p className="mt-0.5 text-sm text-ink-muted">Tu entrenador de español mexicano</p>
+      <header className="flex items-start justify-between gap-3 px-4 pt-6 pb-2 lg:mx-auto lg:max-w-5xl lg:px-10 lg:pt-8">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold tracking-tight">Español Coach</h1>
+          <p className="mt-0.5 text-sm text-ink-muted">Tu entrenador de español mexicano</p>
+        </div>
+        <Link
+          href="/add"
+          data-testid="home-add-desktop"
+          className="hidden shrink-0 rounded-full bg-accent px-5 text-sm font-semibold text-accent-fg active:opacity-90 lg:flex lg:h-11 lg:items-center"
+        >
+          Agregar contenido
+        </Link>
       </header>
 
-      <ReviewQueue />
+      {/*
+        At `lg:` Plan (left) and Repaso (right) sit side by side; below
+        that `lg:`, this wrapper div carries no classes of its own, so
+        `ReviewQueue`/`PlanCard` render as the exact same two siblings,
+        with the exact same own `px-4 pt-3`, stacking exactly as before.
+      */}
+      <div className="lg:mx-auto lg:grid lg:max-w-5xl lg:grid-cols-2 lg:items-start lg:gap-5 lg:px-10 lg:pt-3">
+        <ReviewQueue />
+        <PlanCard card={planCard} />
+      </div>
 
-      {planCard && <PlanCard card={planCard} />}
-
-      <main className="px-4 pb-28 pt-4">
+      <main className="px-4 pb-28 pt-4 lg:mx-auto lg:max-w-5xl lg:px-10 lg:pb-16 lg:pt-2">
         {contents.length === 0 ? (
           <EmptyState />
         ) : (
-          <ul className="flex flex-col gap-3">
+          <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-4">
             {contents.map((row) => {
               const total = row.candidateCount;
               const hasExtraction = row.extraction !== null;
@@ -80,13 +96,19 @@ export default function Home() {
 
 const PLAN_CARD_PROMPT_PREVIEW_LENGTH = 60;
 
-type PlanCardData = {
+/** No active syllabus unit yet (fresh install, nothing ingested) — the card becomes a setup teaser pointing at /plan. */
+type PlanCardSetup = { kind: "setup" };
+
+type PlanCardActive = {
+  kind: "active";
   unitLabel: string;
   unitTitle: string;
   nextActionLabel: string;
   nextActionHref: string;
   evidenceLine: string;
 };
+
+type PlanCardData = PlanCardSetup | PlanCardActive;
 
 function truncatePlanText(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
@@ -95,18 +117,20 @@ function truncatePlanText(text: string, max: number): string {
 /**
  * Derives the home page's compact Plan card: the active unit's headline plus
  * the first unfinished thing to do — an unread section, else an unwritten
- * tarea, else a nudge to review constructions on `/plan`. Null when there's
- * no active syllabus unit (nothing ingested yet), which hides the card
- * entirely.
+ * tarea, else a nudge to review constructions on `/plan`. With no active
+ * syllabus unit (nothing ingested yet — including a fresh install), returns
+ * the `"setup"` variant instead of null: the card always renders, in one of
+ * its two states, so `/plan` (and its ingest form) stays reachable on mobile
+ * without typing the URL. See `PlanCard` below for both states' rendering.
  */
-function buildPlanCard(db: Db): PlanCardData | null {
+function buildPlanCard(db: Db): PlanCardData {
   const active = getActiveUnit(db);
-  if (!active) return null;
+  if (!active) return { kind: "setup" };
 
   const level = getLevel(active.level);
   const unitConfig = getUnit(active.level, active.unit);
   const evidence = getUnitEvidence(db, active.level, active.unit);
-  if (!level || !unitConfig || !evidence) return null;
+  if (!level || !unitConfig || !evidence) return { kind: "setup" };
 
   const unitIndex = level.units.findIndex((u) => u.id === active.unit);
   const unitLabel = unitIndex >= 0 ? `Unidad ${unitIndex + 1}` : "Unidad";
@@ -131,15 +155,46 @@ function buildPlanCard(db: Db): PlanCardData | null {
   const writtenTareas = evidence.tareas.filter((t) => t.writingsCount > 0).length;
   const evidenceLine = `${solidCount}/${evidence.constructions.length} construcciones · ${writtenTareas}/${evidence.tareas.length} tareas`;
 
-  return { unitLabel, unitTitle: unitConfig.title, nextActionLabel, nextActionHref, evidenceLine };
+  return { kind: "active", unitLabel, unitTitle: unitConfig.title, nextActionLabel, nextActionHref, evidenceLine };
 }
 
+/**
+ * `lg:order-1 lg:px-0 lg:pt-0`: mirrors `ReviewQueue`'s own note — reorders
+ * ahead of Repaso in the `lg:` grid without touching mobile DOM order (Plan
+ * already renders second on mobile, below Repaso) — identical in both of
+ * this card's states, so the teaser occupies exactly the grid cell/DOM slot
+ * the active card would.
+ *
+ * One component, two states (`card.kind`), same `data-testid="home-plan-card"`
+ * and slot/styling throughout — `data-plan-state` distinguishes them for
+ * tests rather than forking a second card component.
+ */
 function PlanCard({ card }: { card: PlanCardData }) {
+  if (card.kind === "setup") {
+    return (
+      <section className="px-4 pt-3 lg:order-1 lg:px-0 lg:pt-0">
+        <Link
+          href="/plan"
+          data-testid="home-plan-card"
+          data-plan-state="setup"
+          className="block rounded-2xl border border-line bg-paper-elevated p-4 shadow-sm transition-colors active:bg-line/30"
+        >
+          <h2 className="text-sm font-semibold text-ink">Plan de estudios</h2>
+          <p className="mt-1.5 text-[15px] leading-snug text-ink">
+            Configura tu plan — sube tu libro Dicho y hecho y conviértelo en tu currículo.
+          </p>
+          <p className="mt-2 text-xs font-semibold text-accent">Configurar →</p>
+        </Link>
+      </section>
+    );
+  }
+
   return (
-    <section className="px-4 pt-3">
+    <section className="px-4 pt-3 lg:order-1 lg:px-0 lg:pt-0">
       <Link
         href={card.nextActionHref}
         data-testid="home-plan-card"
+        data-plan-state="active"
         className="block rounded-2xl border border-line bg-paper-elevated p-4 shadow-sm transition-colors active:bg-line/30"
       >
         <h2 className="text-sm font-semibold text-ink">
@@ -204,17 +259,21 @@ function EmptyState() {
  * bottom-right of the *reading column* rather than the physical screen edge
  * on wide desktop viewports. The extra 4rem of bottom padding clears the
  * fixed `TabBar` (h-16 = 4rem) rendered underneath it in the root layout.
+ *
+ * `lg:hidden`: at `lg:` this is replaced by the plain "Agregar contenido"
+ * button in the page header above — the FAB stays a mobile-only affordance.
  */
 function FabWrapper() {
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center lg:hidden"
       style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom))" }}
     >
       <div className="relative w-full max-w-md">
         <Link
           href="/add"
           aria-label="Agregar contenido"
+          data-testid="home-add-fab"
           className="pointer-events-auto absolute bottom-5 right-5 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-accent-fg shadow-lg shadow-black/20 transition-transform active:scale-95"
         >
           <svg viewBox="0 0 24 24" fill="none" className="h-7 w-7" aria-hidden="true">

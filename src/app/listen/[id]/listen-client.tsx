@@ -12,6 +12,7 @@ import {
   SEVERITY_LABELS,
   TAXONOMY_LABELS,
 } from "@/lib/labels";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 
 interface ListenClientProps {
   contentId: string;
@@ -107,6 +108,12 @@ function LoadingDots() {
 
 export function ListenClient({ contentId, title, initialTranscribed }: ListenClientProps) {
   const router = useRouter();
+  // Decides accordion vs. two-pane mounting (not just CSS visibility) — same
+  // structural-mount idiom as Read's sheet/panel gate (`useMediaQuery`'s doc
+  // comment): the desktop pane keeps its own segment selection permanently
+  // visible instead of expanding/collapsing inline, so it's a different
+  // component tree, not just a CSS rearrangement.
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
   // --- transcription gate ---
   const [transcribed, setTranscribed] = useState(initialTranscribed);
@@ -406,7 +413,7 @@ export function ListenClient({ contentId, title, initialTranscribed }: ListenCli
     <div className="flex min-h-dvh flex-col">
       <audio ref={audioRef} src={`/api/media/${contentId}`} preload="metadata" />
 
-      <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-line bg-paper/95 px-2 py-2 backdrop-blur">
+      <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-line bg-paper/95 px-2 py-2 backdrop-blur lg:px-6 lg:py-3">
         <button
           type="button"
           onClick={() => router.back()}
@@ -419,117 +426,325 @@ export function ListenClient({ contentId, title, initialTranscribed }: ListenCli
         <SpeedToggle speed={speed} onChange={setPlaybackSpeed} />
       </header>
 
-      <main className="flex-1 px-4 pb-28 pt-5">
-        <ul className="flex flex-col gap-3" data-testid="segment-list">
-          {segments.map((segment, index) => {
-            const attempt = attempts[index];
-            const active = activeIndex === index;
-            const showForm = active && (!attempt || retrying);
-            const showDiff = active && attempt && !retrying;
+      {/*
+        Structural fork (not just CSS), same reasoning as the doc comment on
+        `isDesktop` above: desktop keeps a left column of compact rows and a
+        permanently-visible right-hand workspace pane for whichever segment is
+        selected; mobile keeps its inline accordion, completely untouched
+        below (`!isDesktop`), so SSR/first paint (`isDesktop` always false
+        pre-hydration) always renders the exact same mobile tree it always
+        has.
+      */}
+      {isDesktop ? (
+        <main className="flex-1 lg:flex lg:items-start lg:gap-8 lg:px-10 lg:pb-16 lg:pt-8">
+          <aside data-testid="segment-list-panel" className="lg:sticky lg:top-20 lg:w-[320px] lg:shrink-0">
+            <ul className="flex flex-col gap-2" data-testid="segment-list">
+              {segments.map((segment, index) => (
+                <DesktopSegmentRow
+                  key={segment.index}
+                  segment={segment}
+                  index={index}
+                  active={activeIndex === index}
+                  attempt={attempts[index]}
+                  onSelect={() => openSegment(index)}
+                  onPlay={() => playSegment(segment)}
+                />
+              ))}
+            </ul>
+          </aside>
 
-            return (
-              <li
-                key={segment.index}
-                data-testid="segment-card"
-                data-segment-index={index}
-                data-state={attempt ? "attempted" : "sin-intentar"}
-                className="rounded-2xl border border-line bg-paper-elevated p-4 shadow-sm"
+          <div className="lg:min-w-0 lg:flex-1">
+            {activeIndex !== null ? (
+              <div
+                key={activeIndex}
+                data-testid="dictation-panel"
+                className="rounded-2xl border border-line bg-paper-elevated p-5 shadow-sm"
               >
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    data-testid="segment-play"
-                    aria-label={`Reproducir fragmento ${index + 1}`}
-                    onClick={() => playSegment(segment)}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-strong active:opacity-80"
-                  >
-                    <PlayIcon />
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="segment-open"
-                    onClick={() => openSegment(index)}
-                    className="flex min-w-0 flex-1 flex-col items-start text-left"
-                  >
-                    <span className="text-sm font-semibold text-ink">Fragmento {index + 1}</span>
-                    <span className="text-xs text-ink-muted">{formatDuration(segment.endMs - segment.startMs)}</span>
-                  </button>
-                  <span
-                    data-testid="segment-state-badge"
-                    className={
-                      attempt
-                        ? attempt.misses.length === 0
-                          ? "rounded-full bg-kept-bg px-2.5 py-1 text-xs font-semibold text-kept-fg"
-                          : "rounded-full bg-amber-bg px-2.5 py-1 text-xs font-semibold text-amber-fg"
-                        : "rounded-full bg-paper px-2.5 py-1 text-xs font-medium text-ink-muted"
-                    }
-                  >
-                    {attempt ? (attempt.misses.length === 0 ? "Perfecto" : missCountLabel(attempt.misses.length)) : "Sin intentar"}
-                  </span>
+                <h2 className="text-sm font-semibold text-ink">Fragmento {activeIndex + 1}</h2>
+                <div className="mt-4">
+                  <SegmentWorkspace
+                    index={activeIndex}
+                    attempt={attempts[activeIndex]}
+                    retrying={retrying}
+                    typedText={typedText}
+                    onTypedTextChange={setTypedText}
+                    submitting={submitting}
+                    submitError={submitError}
+                    onCompare={handleCompare}
+                    onReplay={() => playSegment(segments[activeIndex])}
+                    capturedKeys={capturedKeys}
+                    capturingKey={capturingKey}
+                    onCapture={handleCapture}
+                    onRetryAttempt={handleRetryAttempt}
+                    followUp={getFollowUp(activeIndex)}
+                    onFollowUpChangeText={(text) => setFollowUpText(activeIndex, text)}
+                    onFollowUpSubmit={() => handleFollowUpSubmit(activeIndex)}
+                    onFollowUpAgain={() => handleFollowUpAgain(activeIndex)}
+                  />
                 </div>
+              </div>
+            ) : (
+              <div data-testid="dictation-panel-empty" className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-line px-6 py-16 text-center">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-accent-soft text-accent-strong">
+                  <PlayIcon />
+                </div>
+                <p className="text-sm text-ink-muted">Elige un fragmento para dictar</p>
+              </div>
+            )}
+          </div>
+        </main>
+      ) : (
+        <main className="flex-1 px-4 pb-28 pt-5">
+          <ul className="flex flex-col gap-3" data-testid="segment-list">
+            {segments.map((segment, index) => {
+              const attempt = attempts[index];
+              const active = activeIndex === index;
 
-                {active && (
-                  <div className="mt-4 border-t border-line pt-4">
-                    {showForm && (
-                      <div className="flex flex-col gap-3">
-                        <button
-                          type="button"
-                          data-testid="segment-replay"
-                          onClick={() => playSegment(segment)}
-                          className="inline-flex w-fit items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-ink active:bg-line/30"
-                        >
-                          <PlayIcon small /> Escuchar de nuevo
-                        </button>
-                        <textarea
-                          data-testid="dictation-textarea"
-                          value={typedText}
-                          onChange={(e) => setTypedText(e.target.value)}
-                          placeholder="Escribe lo que oíste…"
-                          className="min-h-24 rounded-xl border border-line bg-paper px-4 py-3 text-base leading-relaxed text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
-                        />
-                        {submitError && <p className="text-sm text-danger-fg">{submitError}</p>}
-                        <button
-                          type="button"
-                          data-testid="dictation-submit"
-                          onClick={handleCompare}
-                          disabled={submitting || typedText.trim().length === 0}
-                          className="flex h-11 items-center justify-center gap-2 rounded-full bg-accent text-sm font-semibold text-accent-fg active:opacity-90 disabled:opacity-60"
-                        >
-                          {submitting && (
-                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-accent-fg/40 border-t-accent-fg" />
-                          )}
-                          {submitting ? "Comparando…" : "Comparar"}
-                        </button>
-                      </div>
-                    )}
-
-                    {showDiff && attempt && (
-                      <>
-                        <DiffPanel
-                          segmentIndex={index}
-                          attempt={attempt}
-                          capturedKeys={capturedKeys}
-                          capturingKey={capturingKey}
-                          onCapture={handleCapture}
-                          onRetry={handleRetryAttempt}
-                        />
-                        <ProductionFollowUp
-                          segmentIndex={index}
-                          state={getFollowUp(index)}
-                          onChangeText={(text) => setFollowUpText(index, text)}
-                          onSubmit={() => handleFollowUpSubmit(index)}
-                          onAgain={() => handleFollowUpAgain(index)}
-                        />
-                      </>
-                    )}
+              return (
+                <li
+                  key={segment.index}
+                  data-testid="segment-card"
+                  data-segment-index={index}
+                  data-state={attempt ? "attempted" : "sin-intentar"}
+                  className="rounded-2xl border border-line bg-paper-elevated p-4 shadow-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      data-testid="segment-play"
+                      aria-label={`Reproducir fragmento ${index + 1}`}
+                      onClick={() => playSegment(segment)}
+                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-strong active:opacity-80"
+                    >
+                      <PlayIcon />
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="segment-open"
+                      onClick={() => openSegment(index)}
+                      className="flex min-w-0 flex-1 flex-col items-start text-left"
+                    >
+                      <span className="text-sm font-semibold text-ink">Fragmento {index + 1}</span>
+                      <span className="text-xs text-ink-muted">{formatDuration(segment.endMs - segment.startMs)}</span>
+                    </button>
+                    <span
+                      data-testid="segment-state-badge"
+                      className={
+                        attempt
+                          ? attempt.misses.length === 0
+                            ? "rounded-full bg-kept-bg px-2.5 py-1 text-xs font-semibold text-kept-fg"
+                            : "rounded-full bg-amber-bg px-2.5 py-1 text-xs font-semibold text-amber-fg"
+                          : "rounded-full bg-paper px-2.5 py-1 text-xs font-medium text-ink-muted"
+                      }
+                    >
+                      {attempt ? (attempt.misses.length === 0 ? "Perfecto" : missCountLabel(attempt.misses.length)) : "Sin intentar"}
+                    </span>
                   </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </main>
+
+                  {active && (
+                    <div className="mt-4 border-t border-line pt-4">
+                      <SegmentWorkspace
+                        index={index}
+                        attempt={attempt}
+                        retrying={retrying}
+                        typedText={typedText}
+                        onTypedTextChange={setTypedText}
+                        submitting={submitting}
+                        submitError={submitError}
+                        onCompare={handleCompare}
+                        onReplay={() => playSegment(segment)}
+                        capturedKeys={capturedKeys}
+                        capturingKey={capturingKey}
+                        onCapture={handleCapture}
+                        onRetryAttempt={handleRetryAttempt}
+                        followUp={getFollowUp(index)}
+                        onFollowUpChangeText={(text) => setFollowUpText(index, text)}
+                        onFollowUpSubmit={() => handleFollowUpSubmit(index)}
+                        onFollowUpAgain={() => handleFollowUpAgain(index)}
+                      />
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </main>
+      )}
     </div>
+  );
+}
+
+/**
+ * The active segment's dictation workspace — the dictation form, or (once an
+ * attempt exists and isn't being retried) the diff + capture chips +
+ * "Ahora dilo tú" follow-up. Shared verbatim between the mobile accordion
+ * (rendered inline under the open `segment-card`) and the desktop right-hand
+ * pane (rendered once for whichever row is selected) — same markup either
+ * way, only the surrounding container differs, so this is the one place that
+ * markup exists.
+ */
+function SegmentWorkspace({
+  index,
+  attempt,
+  retrying,
+  typedText,
+  onTypedTextChange,
+  submitting,
+  submitError,
+  onCompare,
+  onReplay,
+  capturedKeys,
+  capturingKey,
+  onCapture,
+  onRetryAttempt,
+  followUp,
+  onFollowUpChangeText,
+  onFollowUpSubmit,
+  onFollowUpAgain,
+}: {
+  index: number;
+  attempt: AttemptResult | undefined;
+  retrying: boolean;
+  typedText: string;
+  onTypedTextChange: (text: string) => void;
+  submitting: boolean;
+  submitError: string | null;
+  onCompare: () => void;
+  onReplay: () => void;
+  capturedKeys: Set<string>;
+  capturingKey: string | null;
+  onCapture: (segmentIndex: number, missIndex: number, expected: string) => void;
+  onRetryAttempt: () => void;
+  followUp: FollowUpState;
+  onFollowUpChangeText: (text: string) => void;
+  onFollowUpSubmit: () => void;
+  onFollowUpAgain: () => void;
+}) {
+  const showForm = !attempt || retrying;
+  const showDiff = attempt && !retrying;
+
+  return (
+    <>
+      {showForm && (
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            data-testid="segment-replay"
+            onClick={onReplay}
+            className="inline-flex w-fit items-center gap-1.5 rounded-full border border-line px-3 py-1.5 text-xs font-semibold text-ink active:bg-line/30"
+          >
+            <PlayIcon small /> Escuchar de nuevo
+          </button>
+          <textarea
+            data-testid="dictation-textarea"
+            value={typedText}
+            onChange={(e) => onTypedTextChange(e.target.value)}
+            placeholder="Escribe lo que oíste…"
+            className="min-h-24 rounded-xl border border-line bg-paper px-4 py-3 text-base leading-relaxed text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
+          />
+          {submitError && <p className="text-sm text-danger-fg">{submitError}</p>}
+          <button
+            type="button"
+            data-testid="dictation-submit"
+            onClick={onCompare}
+            disabled={submitting || typedText.trim().length === 0}
+            className="flex h-11 items-center justify-center gap-2 rounded-full bg-accent text-sm font-semibold text-accent-fg active:opacity-90 disabled:opacity-60"
+          >
+            {submitting && (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-accent-fg/40 border-t-accent-fg" />
+            )}
+            {submitting ? "Comparando…" : "Comparar"}
+          </button>
+        </div>
+      )}
+
+      {showDiff && attempt && (
+        <>
+          <DiffPanel
+            segmentIndex={index}
+            attempt={attempt}
+            capturedKeys={capturedKeys}
+            capturingKey={capturingKey}
+            onCapture={onCapture}
+            onRetry={onRetryAttempt}
+          />
+          <ProductionFollowUp
+            segmentIndex={index}
+            state={followUp}
+            onChangeText={onFollowUpChangeText}
+            onSubmit={onFollowUpSubmit}
+            onAgain={onFollowUpAgain}
+          />
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * One compact row in the desktop left-hand segment list (~320px, sticky) —
+ * play button, fragment label/duration, state badge, same visual vocabulary
+ * as the mobile `segment-card` row but denser, and selecting it (rather than
+ * expanding an accordion) drives the right-hand `SegmentWorkspace` pane.
+ */
+function DesktopSegmentRow({
+  segment,
+  index,
+  active,
+  attempt,
+  onSelect,
+  onPlay,
+}: {
+  segment: TranscriptSegment;
+  index: number;
+  active: boolean;
+  attempt: AttemptResult | undefined;
+  onSelect: () => void;
+  onPlay: () => void;
+}) {
+  return (
+    <li
+      data-testid="segment-row"
+      data-segment-index={index}
+      data-active={active}
+      data-state={attempt ? "attempted" : "sin-intentar"}
+      className={
+        active
+          ? "flex items-center gap-2.5 rounded-xl border border-accent bg-accent-soft px-3 py-2.5"
+          : "flex items-center gap-2.5 rounded-xl border border-line bg-paper-elevated px-3 py-2.5 transition-colors hover:bg-line/20"
+      }
+    >
+      <button
+        type="button"
+        data-testid="segment-play"
+        aria-label={`Reproducir fragmento ${index + 1}`}
+        onClick={onPlay}
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-strong active:opacity-80"
+      >
+        <PlayIcon small />
+      </button>
+      <button
+        type="button"
+        data-testid="segment-open"
+        onClick={onSelect}
+        className="flex min-w-0 flex-1 flex-col items-start text-left"
+      >
+        <span className="text-sm font-semibold text-ink">Fragmento {index + 1}</span>
+        <span className="text-xs text-ink-muted">{formatDuration(segment.endMs - segment.startMs)}</span>
+      </button>
+      <span
+        data-testid="segment-state-badge"
+        className={
+          attempt
+            ? attempt.misses.length === 0
+              ? "shrink-0 rounded-full bg-kept-bg px-2 py-0.5 text-[11px] font-semibold text-kept-fg"
+              : "shrink-0 rounded-full bg-amber-bg px-2 py-0.5 text-[11px] font-semibold text-amber-fg"
+            : "shrink-0 rounded-full bg-paper px-2 py-0.5 text-[11px] font-medium text-ink-muted"
+        }
+      >
+        {attempt ? (attempt.misses.length === 0 ? "Perfecto" : missCountLabel(attempt.misses.length)) : "Sin intentar"}
+      </span>
+    </li>
   );
 }
 

@@ -46,7 +46,7 @@ type CardPhase = "idle" | "pending";
  */
 export function SourceDirectory() {
   return (
-    <ul className="flex flex-col gap-4" data-testid="source-list">
+    <ul className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4" data-testid="source-list">
       {CURATED_SOURCES.map((source) => (
         <li key={source.id}>
           <SourceCard source={source} />

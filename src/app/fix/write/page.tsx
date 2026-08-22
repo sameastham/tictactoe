@@ -56,7 +56,7 @@ export default async function FixWritePage({
   const tareaPreset = tareaRef ? resolveTarea(tareaRef) : null;
 
   return (
-    <div className="min-h-dvh px-4 pb-28 pt-6">
+    <div className="min-h-dvh px-4 pb-28 pt-6 lg:mx-auto lg:max-w-3xl lg:px-10 lg:pt-10">
       <header className="mb-6 flex items-center gap-3">
         <Link
           href="/fix"

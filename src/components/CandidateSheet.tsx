@@ -2,8 +2,8 @@
 
 import { useEffect } from "react";
 import type { Candidate } from "@/lib/contracts";
-import { REGISTER_CHIP_CLASSES, REGISTER_LABELS, TAXONOMY_LABELS } from "@/lib/labels";
 import type { Decision } from "@/app/read/[id]/read-client";
+import { CandidateDetail } from "@/components/CandidateDetail";
 
 interface CandidateSheetProps {
   candidate: Candidate;
@@ -12,19 +12,14 @@ interface CandidateSheetProps {
   onDecide: (action: Decision) => void;
 }
 
-/** Renders `sentence` with the first verbatim occurrence of `chunk` bolded. */
-function OriginSentence({ sentence, chunk }: { sentence: string; chunk: string }) {
-  const idx = sentence.indexOf(chunk);
-  if (idx === -1) return <>{sentence}</>;
-  return (
-    <>
-      {sentence.slice(0, idx)}
-      <strong className="font-semibold text-ink">{chunk}</strong>
-      {sentence.slice(idx + chunk.length)}
-    </>
-  );
-}
-
+/**
+ * Mobile bottom sheet chrome (scrim, slide-up panel, drag handle) around
+ * the shared `CandidateDetail` body — see that component's doc comment for
+ * why the content itself isn't duplicated here. Mounted only below `lg:`
+ * (see `read-client.tsx`'s `useMediaQuery` gate) — the desktop-width
+ * equivalent is a persistent sticky panel, not a modal, so it never mounts
+ * this component at all.
+ */
 export function CandidateSheet({ candidate, decision, onClose, onDecide }: CandidateSheetProps) {
   // Lock background scroll while the sheet is open.
   useEffect(() => {
@@ -50,96 +45,7 @@ export function CandidateSheet({ candidate, decision, onClose, onDecide }: Candi
         >
           <div className="mx-auto mb-4 h-1.5 w-10 shrink-0 rounded-full bg-line" />
 
-          <h2 className="text-xl font-semibold leading-snug text-ink">{candidate.chunk}</h2>
-
-          <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            <span
-              data-testid="candidate-register"
-              className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${REGISTER_CHIP_CLASSES[candidate.register]}`}
-            >
-              {REGISTER_LABELS[candidate.register]}
-            </span>
-            {decision === "keep" && (
-              <span className="rounded-full bg-kept-bg px-2.5 py-1 text-xs font-semibold text-kept-fg">
-                Guardado
-              </span>
-            )}
-            {decision === "discard" && (
-              <span className="rounded-full bg-discard-bg px-2.5 py-1 text-xs font-semibold text-discard-fg">
-                Descartado
-              </span>
-            )}
-          </div>
-
-          <p className="mt-4 text-[15px] leading-relaxed text-ink-muted">
-            <OriginSentence sentence={candidate.origin_sentence} chunk={candidate.chunk} />
-          </p>
-
-          <p data-testid="candidate-why" className="mt-4 text-sm leading-relaxed text-ink">
-            {candidate.why}
-          </p>
-
-          {candidate.contrast_set && candidate.contrast_set.length > 0 && (
-            <div className="mt-4">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Alternativas</h3>
-              <div className="flex flex-wrap gap-2">
-                {candidate.contrast_set.map((alt, i) => (
-                  <span
-                    key={alt}
-                    className={
-                      i === 0
-                        ? "rounded-full bg-accent px-3 py-1.5 text-sm font-semibold text-accent-fg"
-                        : "rounded-full border border-line px-3 py-1.5 text-sm text-ink-muted"
-                    }
-                  >
-                    {alt}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {candidate.taxonomy && candidate.taxonomy.length > 0 && (
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              {candidate.taxonomy.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full border border-line px-2 py-0.5 text-[11px] font-medium text-ink-muted"
-                >
-                  {TAXONOMY_LABELS[tag]}
-                </span>
-              ))}
-            </div>
-          )}
-
-          <div className="mt-6 flex gap-3">
-            {decision ? (
-              <button
-                type="button"
-                onClick={onClose}
-                className="h-12 flex-1 rounded-full bg-accent text-base font-semibold text-accent-fg active:opacity-90"
-              >
-                Cerrar
-              </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => onDecide("discard")}
-                  className="h-12 flex-1 rounded-full border border-line text-base font-semibold text-ink active:bg-line/40"
-                >
-                  Descartar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onDecide("keep")}
-                  className="h-12 flex-1 rounded-full bg-accent text-base font-semibold text-accent-fg active:opacity-90"
-                >
-                  Guardar
-                </button>
-              </>
-            )}
-          </div>
+          <CandidateDetail candidate={candidate} decision={decision} onDecide={onDecide} onClose={onClose} />
         </div>
       </div>
     </div>

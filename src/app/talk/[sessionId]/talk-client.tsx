@@ -6,6 +6,7 @@ import type { JudgeIssue, JudgedSentence, TalkReport, TalkTurnMeta } from "@/lib
 import { RUNG_CHIP_CLASSES, RUNG_EDGE_CLASSES, RUNG_LABELS, SEVERITY_LABELS, TAXONOMY_LABELS } from "@/lib/labels";
 import { formatElapsed, useVoiceRecorder } from "@/components/VoiceRecorder";
 import { getBrowserTts } from "@/lib/tts";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 
 export interface TalkTurnDto {
   role: "learner" | "tutor";
@@ -146,6 +147,13 @@ export function TalkClient({
   chunksById: initialChunksById,
 }: TalkClientProps) {
   const router = useRouter();
+  // Structural fork for the post-session report's right rail (Fluidez +
+  // credit chips + Para practicar, sticky) — same reasoning as Listen's
+  // `isDesktop` gate: the rail groups three siblings that interleave with
+  // the sentence list in mobile's DOM order, so it's mounted as a genuinely
+  // different tree at `lg:` rather than reflowed with CSS alone. Unused by
+  // the chat view itself, which only needs plain `lg:` centering.
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
   const [turns, setTurns] = useState<TalkTurnDto[]>(initialTurns);
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
@@ -322,7 +330,7 @@ export function TalkClient({
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-line bg-paper/95 px-2 py-2 backdrop-blur">
+      <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-line bg-paper/95 px-2 py-2 backdrop-blur lg:px-6 lg:py-3">
         <button
           type="button"
           onClick={() => router.push("/talk")}
@@ -358,11 +366,18 @@ export function TalkClient({
           ttsAvailable={tts.available}
           speakingIndex={speakingIndex}
           onToggleSpeak={handleToggleSpeak}
+          isDesktop={isDesktop}
         />
       ) : (
         <>
           <main className="flex-1 overflow-y-auto px-3 py-4" data-testid="talk-transcript">
-            <div className="flex flex-col gap-3">
+            {/*
+              Bubbles keep their own per-bubble max-widths (`max-w-[80%]`,
+              unchanged) — this only centers the whole transcript column at
+              `lg:`, the same "wrap the existing block, add lg: classes only"
+              idiom as every other surface's width cap.
+            */}
+            <div className="flex flex-col gap-3 lg:mx-auto lg:max-w-2xl">
               {turns.map((turn, i) => (
                 <Bubble
                   key={i}
@@ -382,60 +397,63 @@ export function TalkClient({
             className="sticky bottom-0 border-t border-line bg-paper/95 px-3 pt-3 backdrop-blur"
             style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
           >
-            {sendError && <p className="mb-2 text-sm text-danger-fg">{sendError}</p>}
-            {endError && <p className="mb-2 text-sm text-danger-fg">{endError}</p>}
+            {/* Same centering idiom as the transcript above — the footer bar itself stays edge-to-edge. */}
+            <div className="lg:mx-auto lg:max-w-2xl">
+              {sendError && <p className="mb-2 text-sm text-danger-fg">{sendError}</p>}
+              {endError && <p className="mb-2 text-sm text-danger-fg">{endError}</p>}
 
-            {recorder.status === "recording" ? (
-              <RecordingBar elapsedMs={recorder.elapsedMs} onStop={recorder.stop} onCancel={recorder.cancel} />
-            ) : recorder.status === "transcribing" ? (
-              <div
-                data-testid="voice-transcribing"
-                className="flex h-11 items-center gap-3 rounded-2xl border border-line bg-paper-elevated px-4 text-sm text-ink-muted"
-              >
-                <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-accent/40 border-t-accent" />
-                Transcribiendo…
-              </div>
-            ) : (
-              <>
-                {recorder.status === "error" && recorder.errorMessage && (
-                  <p className="mb-2 text-sm text-danger-fg" data-testid="voice-error">
-                    {recorder.errorMessage}
-                  </p>
-                )}
-                <div className="flex items-end gap-2">
-                  <textarea
-                    data-testid="talk-input"
-                    value={text}
-                    onChange={(e) => handleTextChange(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    rows={textareaRows(text)}
-                    placeholder="Escribe en español…"
-                    disabled={pending}
-                    className="min-h-11 flex-1 resize-none rounded-2xl border border-line bg-paper-elevated px-4 py-2.5 text-base leading-relaxed text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25 disabled:opacity-60"
-                  />
-                  <button
-                    type="button"
-                    data-testid="voice-mic-button"
-                    onClick={handleMicTap}
-                    disabled={pending || recorder.status === "requesting"}
-                    aria-label="Grabar en voz alta"
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line text-ink active:bg-line/30 disabled:opacity-60"
-                  >
-                    <MicIcon />
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="talk-send"
-                    onClick={sendMessage}
-                    disabled={pending || text.trim().length === 0}
-                    aria-label="Enviar"
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg active:opacity-90 disabled:opacity-60"
-                  >
-                    <SendIcon />
-                  </button>
+              {recorder.status === "recording" ? (
+                <RecordingBar elapsedMs={recorder.elapsedMs} onStop={recorder.stop} onCancel={recorder.cancel} />
+              ) : recorder.status === "transcribing" ? (
+                <div
+                  data-testid="voice-transcribing"
+                  className="flex h-11 items-center gap-3 rounded-2xl border border-line bg-paper-elevated px-4 text-sm text-ink-muted"
+                >
+                  <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-accent/40 border-t-accent" />
+                  Transcribiendo…
                 </div>
-              </>
-            )}
+              ) : (
+                <>
+                  {recorder.status === "error" && recorder.errorMessage && (
+                    <p className="mb-2 text-sm text-danger-fg" data-testid="voice-error">
+                      {recorder.errorMessage}
+                    </p>
+                  )}
+                  <div className="flex items-end gap-2">
+                    <textarea
+                      data-testid="talk-input"
+                      value={text}
+                      onChange={(e) => handleTextChange(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      rows={textareaRows(text)}
+                      placeholder="Escribe en español…"
+                      disabled={pending}
+                      className="min-h-11 flex-1 resize-none rounded-2xl border border-line bg-paper-elevated px-4 py-2.5 text-base leading-relaxed text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25 disabled:opacity-60"
+                    />
+                    <button
+                      type="button"
+                      data-testid="voice-mic-button"
+                      onClick={handleMicTap}
+                      disabled={pending || recorder.status === "requesting"}
+                      aria-label="Grabar en voz alta"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line text-ink active:bg-line/30 disabled:opacity-60"
+                    >
+                      <MicIcon />
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="talk-send"
+                      onClick={sendMessage}
+                      disabled={pending || text.trim().length === 0}
+                      aria-label="Enviar"
+                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg active:opacity-90 disabled:opacity-60"
+                    >
+                      <SendIcon />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </footer>
         </>
       )}
@@ -552,6 +570,7 @@ function ReportView({
   ttsAvailable,
   speakingIndex,
   onToggleSpeak,
+  isDesktop,
 }: {
   report: TalkReport | null;
   topic: string | null;
@@ -562,11 +581,12 @@ function ReportView({
   ttsAvailable: boolean;
   speakingIndex: number | null;
   onToggleSpeak: (index: number, text: string) => void;
+  isDesktop: boolean;
 }) {
   const learnerTurnCount = turns.filter((t) => t.role === "learner").length;
 
   return (
-    <main className="flex-1 px-4 pb-16 pt-5" data-testid="talk-report">
+    <main className="flex-1 px-4 pb-16 pt-5 lg:mx-auto lg:max-w-4xl lg:px-10 lg:pb-16 lg:pt-8" data-testid="talk-report">
       {topic && (
         <p className="mb-4 rounded-xl border border-line bg-paper-elevated px-4 py-3 text-sm text-ink-muted">
           <span className="font-semibold text-ink">Tema: </span>
@@ -574,39 +594,57 @@ function ReportView({
         </p>
       )}
 
-      {report?.fluency && <FluencySection fluency={report.fluency} />}
-
-      {!report || !report.judgment ? (
-        <p className="text-sm text-ink-muted" data-testid="talk-report-unjudged">
-          {learnerTurnCount === 0
-            ? "No dijiste nada esta vez — inténtalo otra vez cuando quieras platicar."
-            : "Esta plática se guardó, pero el modelo no pudo calificarla todavía."}
-        </p>
+      {/*
+        Structural fork, not a CSS reflow: the desktop rail groups Fluidez +
+        credit chips + Para practicar into one sticky column beside the
+        sentence list, but those three sit *interleaved* with the sentence
+        list in the mobile order below (Fluidez, credit, list, practice) — no
+        pure-CSS grid/flex placement can regroup that without either moving
+        DOM nodes (risking mobile's exact stacking order) or fighting
+        multi-row masonry sizing. Mounting two independent trees, gated the
+        same way as Listen's accordion/pane split, sidesteps both: the
+        `!isDesktop` branch below is untouched, byte-for-byte, from before
+        this wave.
+      */}
+      {isDesktop ? (
+        <DesktopReportBody report={report} chunksById={chunksById} learnerTurnCount={learnerTurnCount} />
       ) : (
         <>
-          <CreditChips report={report} chunksById={chunksById} />
+          {report?.fluency && <FluencySection fluency={report.fluency} />}
 
-          <ul className="flex flex-col gap-3" data-testid="talk-sentence-list">
-            {report.judgment.sentences.map((sentence, i) => (
-              <TalkSentenceCard key={i} sentence={sentence} />
-            ))}
-          </ul>
+          {!report || !report.judgment ? (
+            <p className="text-sm text-ink-muted" data-testid="talk-report-unjudged">
+              {learnerTurnCount === 0
+                ? "No dijiste nada esta vez — inténtalo otra vez cuando quieras platicar."
+                : "Esta plática se guardó, pero el modelo no pudo calificarla todavía."}
+            </p>
+          ) : (
+            <>
+              <CreditChips report={report} chunksById={chunksById} />
 
-          {report.practiceNext.length > 0 && (
-            <section className="mt-6" data-testid="practice-next">
-              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Para practicar</h2>
-              <ul className="flex flex-col gap-2">
-                {report.practiceNext.map((line, i) => (
-                  <li
-                    key={i}
-                    data-testid="practice-next-item"
-                    className="rounded-xl border border-line bg-paper-elevated px-4 py-3 text-sm text-ink"
-                  >
-                    {line}
-                  </li>
+              <ul className="flex flex-col gap-3" data-testid="talk-sentence-list">
+                {report.judgment.sentences.map((sentence, i) => (
+                  <TalkSentenceCard key={i} sentence={sentence} />
                 ))}
               </ul>
-            </section>
+
+              {report.practiceNext.length > 0 && (
+                <section className="mt-6" data-testid="practice-next">
+                  <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Para practicar</h2>
+                  <ul className="flex flex-col gap-2">
+                    {report.practiceNext.map((line, i) => (
+                      <li
+                        key={i}
+                        data-testid="practice-next-item"
+                        className="rounded-xl border border-line bg-paper-elevated px-4 py-3 text-sm text-ink"
+                      >
+                        {line}
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+            </>
           )}
         </>
       )}
@@ -621,7 +659,7 @@ function ReportView({
       </button>
 
       {showTranscript && (
-        <div className="mt-3 flex flex-col gap-2" data-testid="talk-transcript-review">
+        <div className="mt-3 flex flex-col gap-2 lg:max-w-2xl" data-testid="talk-transcript-review">
           {turns.map((turn, i) => (
             <Bubble
               key={i}
@@ -635,6 +673,70 @@ function ReportView({
         </div>
       )}
     </main>
+  );
+}
+
+/**
+ * Desktop-only report body (mounted only when `isDesktop`, see `ReportView`
+ * above): sentence-list left, a sticky right rail (Fluidez + credit chips +
+ * Para practicar) — a fresh composition of the same sub-components the
+ * mobile branch uses, not a reflow of the same markup.
+ */
+function DesktopReportBody({
+  report,
+  chunksById,
+  learnerTurnCount,
+}: {
+  report: TalkReport | null;
+  chunksById: Record<string, string>;
+  learnerTurnCount: number;
+}) {
+  const judged = report !== null && report.judgment !== null;
+  const hasRail =
+    Boolean(report?.fluency) ||
+    (judged && (report!.itemsUsed.length > 0 || report!.itemsAvoided.length > 0 || report!.practiceNext.length > 0));
+
+  return (
+    <div className={hasRail ? "lg:grid lg:grid-cols-[1fr_320px] lg:items-start lg:gap-8" : ""}>
+      <div className="lg:min-w-0">
+        {judged ? (
+          <ul className="flex flex-col gap-3" data-testid="talk-sentence-list">
+            {report!.judgment!.sentences.map((sentence, i) => (
+              <TalkSentenceCard key={i} sentence={sentence} />
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-ink-muted" data-testid="talk-report-unjudged">
+            {learnerTurnCount === 0
+              ? "No dijiste nada esta vez — inténtalo otra vez cuando quieras platicar."
+              : "Esta plática se guardó, pero el modelo no pudo calificarla todavía."}
+          </p>
+        )}
+      </div>
+
+      {hasRail && (
+        <aside data-testid="talk-report-rail" className="mt-6 flex flex-col gap-4 lg:sticky lg:top-20 lg:mt-0">
+          {report?.fluency && <FluencySection fluency={report.fluency} />}
+          {judged && <CreditChips report={report!} chunksById={chunksById} />}
+          {judged && report!.practiceNext.length > 0 && (
+            <section data-testid="practice-next">
+              <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Para practicar</h2>
+              <ul className="flex flex-col gap-2">
+                {report!.practiceNext.map((line, i) => (
+                  <li
+                    key={i}
+                    data-testid="practice-next-item"
+                    className="rounded-xl border border-line bg-paper-elevated px-4 py-3 text-sm text-ink"
+                  >
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </aside>
+      )}
+    </div>
   );
 }
 

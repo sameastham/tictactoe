@@ -35,6 +35,7 @@ object TunnelManager {
     private const val PREF_HUB_HOST_PORT = "hub_host_port"
     private const val PREF_HOSTNAME = "hostname"
     private const val PREF_CONTROL_URL = "control_url"
+    private const val PREF_FIRST_LAUNCH_CHOICE_MADE = "first_launch_choice_made"
 
     const val DEFAULT_HOSTNAME = "espanol-coach-phone"
 
@@ -61,6 +62,19 @@ object TunnelManager {
         prefs(context).getString(PREF_HOSTNAME, DEFAULT_HOSTNAME) ?: DEFAULT_HOSTNAME
 
     fun controlUrl(context: Context): String = prefs(context).getString(PREF_CONTROL_URL, "") ?: ""
+
+    /**
+     * Whether MainActivity's one-time first-launch chooser (see
+     * [FirstLaunchChooser]) has already been answered — either option marks
+     * it, so a fresh install is asked "¿Cómo te conectas al servidor?" at
+     * most once, ever.
+     */
+    fun hasMadeFirstLaunchChoice(context: Context): Boolean =
+        prefs(context).getBoolean(PREF_FIRST_LAUNCH_CHOICE_MADE, false)
+
+    fun markFirstLaunchChoiceMade(context: Context) {
+        prefs(context).edit().putBoolean(PREF_FIRST_LAUNCH_CHOICE_MADE, true).apply()
+    }
 
     /**
      * Persists tunnel config. [authKey], if non-blank, is written through to

@@ -39,12 +39,12 @@ export default function PlanPage() {
 
   return (
     <div className="min-h-dvh">
-      <header className="px-4 pt-6 pb-2">
+      <header className="px-4 pt-6 pb-2 lg:mx-auto lg:max-w-4xl lg:px-10 lg:pt-8">
         <h1 className="text-2xl font-bold tracking-tight">Plan</h1>
         <p className="mt-0.5 text-sm text-ink-muted">Tu plan de estudios</p>
       </header>
 
-      <main className="flex flex-col gap-4 px-4 pb-28 pt-4">
+      <main className="flex flex-col gap-4 px-4 pb-28 pt-4 lg:mx-auto lg:max-w-4xl lg:gap-5 lg:px-10 lg:pb-16 lg:pt-6">
         {active ? <ActivePlan db={db} level={active.level} unitId={active.unit} /> : <EmptyState db={db} />}
       </main>
     </div>
@@ -161,20 +161,29 @@ function ActivePlan({ db, level, unitId }: { db: Db; level: string; unitId: stri
       {otherUnits.length > 0 && (
         <section data-testid="other-units" className="flex flex-col gap-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Otras unidades</h3>
-          {otherUnits.map((unit) => {
-            const unitIndex = levelConfig.units.findIndex((u) => u.id === unit.id);
-            const done = unitIndex < activeIndex;
-            return (
-              <OtherUnitRow
-                key={unit.id}
-                db={db}
-                level={level}
-                unitId={unit.id}
-                title={unit.title}
-                done={done}
-              />
-            );
-          })}
+          {/*
+            Same "wrap the existing siblings, add lg: classes only" idiom as
+            the home page's Repaso/Plan grid — this div carries the exact
+            classes the section itself used to carry, so mobile stacking
+            (h3, then each row, all separated by the same gap-2) is
+            unchanged; only `lg:grid` regroups the rows into two columns.
+          */}
+          <div className="flex flex-col gap-2 lg:grid lg:grid-cols-2 lg:gap-3">
+            {otherUnits.map((unit) => {
+              const unitIndex = levelConfig.units.findIndex((u) => u.id === unit.id);
+              const done = unitIndex < activeIndex;
+              return (
+                <OtherUnitRow
+                  key={unit.id}
+                  db={db}
+                  level={level}
+                  unitId={unit.id}
+                  title={unit.title}
+                  done={done}
+                />
+              );
+            })}
+          </div>
         </section>
       )}
 
@@ -213,7 +222,7 @@ function NivelesSection({ db, activeLevelId }: { db: Db; activeLevelId: string }
 
 function SectionsList({ evidence }: { evidence: UnitEvidence }) {
   return (
-    <ul className="mt-4 flex flex-col gap-2">
+    <ul className="mt-4 flex flex-col gap-2 lg:grid lg:grid-cols-2 lg:gap-3">
       {evidence.sections.map((section) => (
         <li key={section.sectionId} data-testid="unit-section-row" data-section-id={section.sectionId}>
           {section.contentId ? (
@@ -273,7 +282,7 @@ function TareaList({ level, unitId, evidence }: { level: string; unitId: string;
   return (
     <div className="mt-4">
       <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Tareas</h4>
-      <ul className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-2 lg:grid lg:grid-cols-2 lg:gap-3">
         {evidence.tareas.map((tarea) => (
           <li
             key={tarea.tareaId}

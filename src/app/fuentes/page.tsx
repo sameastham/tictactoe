@@ -3,7 +3,7 @@ import { SourceDirectory } from "@/components/SourceDirectory";
 
 export default function FuentesPage() {
   return (
-    <div className="min-h-dvh px-4 pb-28 pt-6">
+    <div className="min-h-dvh px-4 pb-28 pt-6 lg:mx-auto lg:max-w-4xl lg:px-10 lg:pt-8">
       <header className="mb-2 flex items-center gap-3">
         <Link
           href="/"
