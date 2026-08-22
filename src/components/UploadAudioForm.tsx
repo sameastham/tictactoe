@@ -2,56 +2,10 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { readMediaUrlErrorMessage, readUploadErrorMessage } from "@/lib/mediaIngestMessages";
 
 type Mode = "archivo" | "url";
 type Phase = "idle" | "uploading" | "transcribing" | "transcribe-error";
-
-/** Best-effort message for a failed POST /api/media (multipart) or transcribe call. */
-async function readErrorMessage(res: Response): Promise<string> {
-  const body = await res.json().catch(() => null);
-  const error = body && typeof body === "object" ? (body as Record<string, unknown>).error : undefined;
-
-  if (res.status === 413) {
-    return "El archivo es demasiado grande (máx. 50 MB).";
-  }
-  if (error === "unsupported_media_type") {
-    return "Formato no compatible. Usa wav, mp3, m4a u ogg.";
-  }
-  if (error === "missing_file") {
-    return "Selecciona un archivo de audio.";
-  }
-  if (res.status === 502) {
-    return typeof error === "string" && error.length > 0 ? error : "No se pudo transcribir el audio.";
-  }
-  if (typeof error === "string" && error.length > 0) {
-    return error;
-  }
-  return "Algo salió mal. Intenta de nuevo.";
-}
-
-/** Best-effort message for a failed POST /api/media (JSON/URL) call — same status codes, different copy. */
-async function readUrlErrorMessage(res: Response): Promise<string> {
-  const body = await res.json().catch(() => null);
-  const error = body && typeof body === "object" ? (body as Record<string, unknown>).error : undefined;
-
-  if (res.status === 422) {
-    return typeof error === "string" && error.length > 0
-      ? error
-      : "No se pudo extraer audio de esa URL.";
-  }
-  if (res.status === 400) {
-    return "Revisa la URL e intenta de nuevo.";
-  }
-  if (res.status === 502) {
-    return typeof error === "string" && error.length > 0
-      ? error
-      : "No se pudo descargar ese video o podcast. Intenta de nuevo.";
-  }
-  if (typeof error === "string" && error.length > 0) {
-    return error;
-  }
-  return "Algo salió mal. Intenta de nuevo.";
-}
 
 export function UploadAudioForm() {
   const router = useRouter();
@@ -72,7 +26,7 @@ export function UploadAudioForm() {
     try {
       const res = await fetch(`/api/content/${contentId}/transcribe`, { method: "POST" });
       if (!res.ok) {
-        setError(await readErrorMessage(res));
+        setError(await readUploadErrorMessage(res));
         setPhase("transcribe-error");
         return;
       }
@@ -98,7 +52,7 @@ export function UploadAudioForm() {
     try {
       const res = await fetch("/api/media", { method: "POST", body: formData });
       if (!res.ok) {
-        setError(await readErrorMessage(res));
+        setError(await readUploadErrorMessage(res));
         setPhase("idle");
         return;
       }
@@ -126,7 +80,7 @@ export function UploadAudioForm() {
         body: JSON.stringify({ url: url.trim(), ...(urlTitle.trim() ? { title: urlTitle.trim() } : {}) }),
       });
       if (!res.ok) {
-        setError(await readUrlErrorMessage(res));
+        setError(await readMediaUrlErrorMessage(res));
         setPhase("idle");
         return;
       }

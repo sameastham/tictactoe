@@ -9,3 +9,10 @@ next-env.d.ts
 test-results/
 playwright-report/
 .venv-stt/
+
+# tsbridge.aar (+ the sources jar gomobile bind drops alongside it) are
+# build artifacts (scripts/build-tsbridge.sh, from tsbridge/) — the Go
+# source is committed, these aren't. android/app already gitignores *.aar
+# generally; this is belt-and-suspenders at the root too.
+android/app/libs/*.aar
+android/app/libs/*-sources.jar

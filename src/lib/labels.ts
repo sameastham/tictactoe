@@ -5,6 +5,7 @@
 import type { MasteryBand, Register, Rung } from "@/lib/taxonomy";
 import type { TaxonomyTag } from "@/lib/taxonomy";
 import type { DictationMissClass } from "@/lib/contracts";
+import type { SourceKind } from "@/lib/sources";
 
 export const REGISTER_LABELS: Record<Register, string> = {
   neutral: "Neutro",
@@ -117,4 +118,25 @@ export const MASTERY_BAND_CHIP_CLASSES: Record<MasteryBand, string> = {
   fragil: "border-danger-border bg-danger-bg text-danger-fg",
   en_progreso: "border-amber-border bg-amber-bg text-amber-fg",
   solido: "border-kept-border bg-kept-bg text-kept-fg",
+};
+
+/** Spanish labels for a curated source's kind (Fuentes directory, `src/lib/sources.ts`). */
+export const SOURCE_KIND_LABELS: Record<SourceKind, string> = {
+  lectura: "Lectura",
+  audio: "Audio",
+  pdf: "PDF",
+  mixto: "Mixto",
+};
+
+/**
+ * Full Tailwind class strings for a curated source's kind badge, keyed by
+ * kind — same written-out-in-full rationale as `REGISTER_CHIP_CLASSES`/
+ * `RUNG_CHIP_CLASSES` above. Reuses existing palette tokens (register hues +
+ * amber) rather than inventing a fifth chip palette just for Fuentes.
+ */
+export const SOURCE_KIND_CHIP_CLASSES: Record<SourceKind, string> = {
+  lectura: "border-register-neutral-border bg-register-neutral-bg text-register-neutral-fg",
+  audio: "border-register-panhispanic-border bg-register-panhispanic-bg text-register-panhispanic-fg",
+  pdf: "border-amber-border bg-amber-bg text-amber-fg",
+  mixto: "border-register-formal-border bg-register-formal-bg text-register-formal-fg",
 };
