@@ -8,11 +8,12 @@
  */
 import Link from "next/link";
 import { getDb, type Db } from "@/db";
-import { getLevel, getNextUnit, getUnit } from "@/server/syllabus/config";
-import { getActiveUnit, getUnitEvidence, type UnitEvidence } from "@/server/syllabus/progress";
+import { getLevel, getNextUnit, getSyllabusLevels, getUnit } from "@/server/syllabus/config";
+import { getActiveUnit, getUnitEvidence, isLevelIngested, type UnitEvidence } from "@/server/syllabus/progress";
 import { MASTERY_BAND_CHIP_CLASSES, MASTERY_BAND_LABELS } from "@/lib/labels";
 import type { MasteryBand } from "@/lib/taxonomy";
 import { AdvanceUnitButton } from "@/app/plan/AdvanceUnitButton";
+import { IngestBookForm, LevelRow, type IngestLevelOption } from "@/components/IngestBookForm";
 
 export const dynamic = "force-dynamic";
 
@@ -44,44 +45,68 @@ export default function PlanPage() {
       </header>
 
       <main className="flex flex-col gap-4 px-4 pb-28 pt-4">
-        {active ? <ActivePlan db={db} level={active.level} unitId={active.unit} /> : <EmptyState />}
+        {active ? <ActivePlan db={db} level={active.level} unitId={active.unit} /> : <EmptyState db={db} />}
       </main>
     </div>
   );
 }
 
-function EmptyState() {
+/** Every configured syllabus level, annotated with whether it's already been ingested — shared by the empty state's form and the active state's "Niveles" block. */
+function levelOptions(db: Db): IngestLevelOption[] {
+  return getSyllabusLevels().map((level) => ({ id: level.id, name: level.name, ingested: isLevelIngested(db, level) }));
+}
+
+function EmptyState({ db }: { db: Db }) {
   return (
-    <div
-      data-testid="plan-empty-state"
-      className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-line px-6 py-16 text-center"
-    >
-      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-soft text-accent-strong">
-        <svg viewBox="0 0 24 24" fill="none" className="h-7 w-7" aria-hidden="true">
-          <path
-            d="M4 5.5C4 4.67 4.67 4 5.5 4H11a2 2 0 0 1 2 2v13.5a1.5 1.5 0 0 0-1.5-1.5H4V5.5Z"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinejoin="round"
-          />
-          <path
-            d="M20 5.5c0-.83-.67-1.5-1.5-1.5H13a2 2 0 0 0-2 2v13.5a1.5 1.5 0 0 1 1.5-1.5H20V5.5Z"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinejoin="round"
-          />
-        </svg>
+    <div className="flex flex-col gap-6">
+      <div
+        data-testid="plan-empty-state"
+        className="flex flex-col items-center gap-4 rounded-2xl border border-dashed border-line px-6 py-10 text-center"
+      >
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-soft text-accent-strong">
+          <svg viewBox="0 0 24 24" fill="none" className="h-7 w-7" aria-hidden="true">
+            <path
+              d="M4 5.5C4 4.67 4.67 4 5.5 4H11a2 2 0 0 1 2 2v13.5a1.5 1.5 0 0 0-1.5-1.5H4V5.5Z"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M20 5.5c0-.83-.67-1.5-1.5-1.5H13a2 2 0 0 0-2 2v13.5a1.5 1.5 0 0 1 1.5-1.5H20V5.5Z"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+        <h2 className="text-base font-semibold text-ink">Tu plan de estudios vive aquí</h2>
+        <p className="text-sm text-ink-muted">
+          Elige un nivel y sube los PDFs del libro — tu plan de estudios se genera automáticamente.
+        </p>
       </div>
-      <h2 className="text-base font-semibold text-ink">Tu plan de estudios vive aquí</h2>
-      <p className="text-sm text-ink-muted">
-        Copia los PDFs del libro a <code className="rounded bg-paper px-1 py-0.5 text-xs">data/books/</code> y corre
-        <br />
-        <code className="mt-1 inline-block rounded bg-paper px-1.5 py-1 text-xs">
-          npm run ingest-book data/books/*.pdf --level dyh7
-        </code>
-      </p>
-      <p className="text-xs text-ink-muted">Los niveles aparecen aquí automáticamente en cuanto los ingieras.</p>
+
+      <IngestBookForm levels={levelOptions(db)} />
+
+      <CliFallbackNote />
     </div>
+  );
+}
+
+function CliFallbackNote() {
+  return (
+    <details
+      data-testid="ingest-cli-fallback"
+      className="rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink-muted"
+    >
+      <summary className="cursor-pointer font-medium text-ink">¿Prefieres la terminal?</summary>
+      <p className="mt-2">
+        Copia los PDFs del libro a <code className="rounded bg-paper-elevated px-1 py-0.5 text-xs">data/books/</code> y
+        corre
+      </p>
+      <code className="mt-1 block rounded bg-paper-elevated px-1.5 py-1 text-xs">
+        npm run ingest-book data/books/*.pdf --level dyh7
+      </code>
+    </details>
   );
 }
 
@@ -89,7 +114,7 @@ function ActivePlan({ db, level, unitId }: { db: Db; level: string; unitId: stri
   const levelConfig = getLevel(level);
   const unitConfig = getUnit(level, unitId);
   const evidence = getUnitEvidence(db, level, unitId);
-  if (!levelConfig || !unitConfig || !evidence) return <EmptyState />;
+  if (!levelConfig || !unitConfig || !evidence) return <EmptyState db={db} />;
 
   const nextUnit = getNextUnit(level, unitId);
   const nextUnitTitle = nextUnit ? (getUnit(nextUnit.level, nextUnit.unit)?.title ?? null) : null;
@@ -152,7 +177,37 @@ function ActivePlan({ db, level, unitId }: { db: Db; level: string; unitId: stri
           })}
         </section>
       )}
+
+      <NivelesSection db={db} activeLevelId={level} />
     </>
+  );
+}
+
+const ESTADO_LABELS: Record<"activo" | "ingerido" | "sin ingerir", string> = {
+  activo: "Activo",
+  ingerido: "Ya ingerido",
+  "sin ingerir": "Sin ingerir",
+};
+
+/**
+ * Compact "Niveles" block at the bottom of the active Plan page: every
+ * configured syllabus level with its ingestion estado, plus an
+ * Ingerir/Reingerir affordance ({@link LevelRow}) opening the same ingest
+ * form used by the empty state.
+ */
+function NivelesSection({ db, activeLevelId }: { db: Db; activeLevelId: string }) {
+  const levels = levelOptions(db);
+
+  return (
+    <section data-testid="niveles-block" className="flex flex-col gap-2">
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Niveles</h3>
+      {levels.map((level) => {
+        const estado = level.id === activeLevelId ? "activo" : level.ingested ? "ingerido" : "sin ingerir";
+        return (
+          <LevelRow key={level.id} level={level} levels={levels} estado={estado} estadoLabel={ESTADO_LABELS[estado]} />
+        );
+      })}
+    </section>
   );
 }
 

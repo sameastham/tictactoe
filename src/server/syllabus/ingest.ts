@@ -10,8 +10,23 @@
  */
 import { extractText, getDocumentProxy } from "unpdf";
 import type { Db } from "@/db";
-import type { SyllabusLevel } from "@/lib/contracts";
+import type {
+  ConstructionIngestResult,
+  IngestReport,
+  SectionIngestResult,
+  SyllabusLevel,
+  UnitIngestResult,
+} from "@/lib/contracts";
 import { cleanPdfText } from "@/server/pdf";
+
+// The report types below (`SectionIngestResult`/`ConstructionIngestResult`/
+// `UnitIngestResult`/`IngestReport`) are defined in `src/lib/contracts.ts` —
+// the single source of truth for every JSON shape (CLAUDE.md Sec.3) — since
+// `IngestReport` is now also an API response body (`POST
+// /api/syllabus/ingest`), not just this module's internal return type.
+// Re-exported here so existing imports (`scripts/ingest-book.ts`,
+// `ingest.test.ts`) keep working unchanged.
+export type { ConstructionIngestResult, IngestReport, SectionIngestResult, UnitIngestResult };
 import { createContent, getContentBySyllabusRef, getItemsBySyllabusRef, seedConstructionItem } from "@/server/repo";
 
 // -----------------------------------------------------------------------------
@@ -409,41 +424,9 @@ export function findConstructionOccurrence(text: string, chunk: string): Constru
 // idempotent recovery gets the same practical guarantee (a botched run is
 // always safely resumable) without that invasive a change.
 
-/** One section's ingestion outcome. */
-export type SectionIngestResult = {
-  unitId: string;
-  sectionId: string;
-  syllabusRef: string;
-  title: string;
-  contentId: string;
-  textLength: number;
-  alreadyExisted: boolean;
-};
-
-/** One construction's ingestion outcome. */
-export type ConstructionIngestResult = {
-  constructionId: string;
-  chunk: string;
-  status: "found" | "unfound" | "already_seeded";
-  /** The section id the chunk's first occurrence was found in — only set when `status === "found"`. */
-  foundInSectionId?: string;
-};
-
-/** One unit's full ingestion outcome — the shape `scripts/ingest-book.ts` renders as the per-unit report table. */
-export type UnitIngestResult = {
-  unitId: string;
-  title: string;
-  sections: SectionIngestResult[];
-  constructions: ConstructionIngestResult[];
-};
-
-/** Full ingestion run outcome. */
-export type IngestReport = {
-  levelId: string;
-  units: UnitIngestResult[];
-  /** Config sections for which NO page of any given PDF was found (heading never matched) — a real mismatch worth investigating, not just an empty section. */
-  missingSections: string[];
-};
+// `SectionIngestResult`/`ConstructionIngestResult`/`UnitIngestResult`/
+// `IngestReport` now live in `src/lib/contracts.ts` (imported and
+// re-exported at the top of this file) — see the note there.
 
 /** One whole-PDF input to {@link ingestBook}: a human-readable source label (for diagnostics) and its raw bytes. */
 export type IngestPdfInput = { source: string; buf: Buffer };

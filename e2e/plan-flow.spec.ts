@@ -1,38 +1,39 @@
-import { execFileSync } from "node:child_process";
 import { test, expect, devices, type BrowserContext, type Page } from "@playwright/test";
 
 /**
- * End-to-end coverage of the Plan (syllabus) UI: ingest the tiny fake book
- * (`fixtures/libro-falso.pdf`) against a fake, non-production level config
- * (`e2e/fixtures/plan-level.json`, via `scripts/ingest-book.ts`'s `--config`
- * flag — see its own doc comment and `src/server/syllabus/config.ts`'s
+ * End-to-end coverage of the Plan (syllabus) UI, INCLUDING the UI-driven book
+ * ingestion form itself: ingest the tiny fake book (`fixtures/libro-falso.pdf`)
+ * against a fake, non-production level config (`e2e/fixtures/plan-level.json`,
+ * merged in as the "fakebook" level via `src/server/syllabus/config.ts`'s
  * `SYLLABUS_EXTRA_CONFIG_DIR`, which `playwright.config.ts`'s `webServer.env`
- * points at `e2e/fixtures`), then walk the full loop: `/plan` shows the
+ * points at `e2e/fixtures`) through `/plan`'s own ingest form
+ * (`src/components/IngestBookForm.tsx`, `POST /api/syllabus/ingest`) — not
+ * the `npm run ingest-book` CLI — then walk the full loop: `/plan` shows the
  * active unit with its sections and construction chips, a section opens as
  * an ordinary reader, a tarea opens `/fix/write` preselected with its prompt
  * and target construction, submitting a write updates the unit's evidence,
  * advancing moves to the next unit, and the home page picks up the new
- * active unit's Plan card.
- *
- * The ingestion runs once in `beforeAll`, directly against the same sqlite
- * file (`DB_PATH=.tmp/e2e.db`) the already-running `webServer` reads —
- * config is loaded once per server process and never changes, and content
- * rows are read fresh per request, so no restart is needed for the running
- * server to see the newly-ingested rows.
+ * active unit's Plan card. The CLI path itself stays covered by
+ * `src/server/syllabus/ingest.test.ts` (unit tests over the shared
+ * `ingestBook` pipeline both the CLI and this route call).
  *
  * Runs in the same shared e2e DB as every other *-flow spec — see
  * review-flow.spec.ts's note on that. This spec's own writes (2 seeded
  * items, 1 syllabus_advanced event, 1 Fix writing) are additive and never
  * assumed-empty by any other spec (verified against every other spec's
- * assertions before adding this file).
+ * assertions before adding this file). It also relies on NO earlier
+ * (alphabetically-sorted) spec file having ingested any syllabus content —
+ * verified true as of this writing (fix-flow, fuentes-flow, listen-*, all
+ * run before plan-flow and none touch the syllabus) — so `/plan` is still
+ * genuinely in its empty state when test 1 below navigates to it.
  *
  * Structured as one `describe.serial` sharing a single page/context, same
  * idiom as the other *-flow specs.
  */
 
-const E2E_DB_PATH = ".tmp/e2e.db";
-const FAKE_CONFIG_PATH = "e2e/fixtures/plan-level.json";
 const FAKE_BOOK_PDF = "fixtures/libro-falso.pdf";
+/** Any non-PDF file already on disk — used only to exercise the ingest form's wrong-type rejection. */
+const WRONG_TYPE_FILE = "fixtures/article-es-mx.txt";
 
 test.describe.serial("Plan flow", () => {
   let context: BrowserContext;
@@ -41,21 +42,6 @@ test.describe.serial("Plan flow", () => {
   let constructionItemIds: string[];
 
   test.beforeAll(async ({ browser }, testInfo) => {
-    test.setTimeout(120_000);
-
-    try {
-      execFileSync("npm", ["run", "ingest-book", "--", FAKE_BOOK_PDF, "--config", FAKE_CONFIG_PATH], {
-        cwd: process.cwd(),
-        env: { ...process.env, DB_PATH: E2E_DB_PATH },
-        stdio: "pipe",
-      });
-    } catch (error) {
-      const stdout = (error as { stdout?: Buffer }).stdout?.toString() ?? "";
-      const stderr = (error as { stderr?: Buffer }).stderr?.toString() ?? "";
-      console.error("ingest-book failed\n--- stdout ---\n", stdout, "\n--- stderr ---\n", stderr);
-      throw error;
-    }
-
     context = await browser.newContext({
       ...devices["Pixel 7"],
       baseURL: testInfo.project.use.baseURL,
@@ -67,8 +53,31 @@ test.describe.serial("Plan flow", () => {
     await context.close();
   });
 
-  test("1. /plan shows the active unit with its sections and construction chips", async () => {
+  test("1. ingest the fake book via the Plan page's UI form, then /plan shows the active unit with its sections and construction chips", async () => {
     await page.goto("/plan");
+
+    await expect(page.getByTestId("plan-empty-state")).toBeVisible();
+    await expect(page.getByTestId("ingest-book-form")).toBeVisible();
+
+    // A wrong-type file is rejected with an honest error and leaves the form
+    // usable — never silently "succeeds" into a bogus ingestion.
+    await page.getByTestId("ingest-level-select").selectOption("fakebook");
+    await page.getByTestId("ingest-files-input").setInputFiles(WRONG_TYPE_FILE);
+    await page.getByTestId("ingest-submit").click();
+    await expect(page.getByTestId("ingest-error")).toContainText("PDF");
+    await expect(page.getByTestId("ingest-book-form")).toBeVisible();
+
+    // The real fake book, via the same form.
+    await page.getByTestId("ingest-files-input").setInputFiles(FAKE_BOOK_PDF);
+    await page.getByTestId("ingest-submit").click();
+
+    const reportRows = page.locator('[data-testid="ingest-report-unit-row"]');
+    await expect(reportRows).toHaveCount(2, { timeout: 30_000 });
+    await expect(reportRows.nth(0)).toContainText("2 secciones");
+    await expect(reportRows.nth(0)).toContainText("2 construcciones");
+    await expect(reportRows.nth(1)).toContainText("2 secciones");
+
+    await page.getByTestId("ingest-view-plan").click();
 
     const hero = page.getByTestId("active-unit-hero");
     await expect(hero).toBeVisible();

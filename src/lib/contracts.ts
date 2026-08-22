@@ -550,3 +550,50 @@ export const AdvanceSyllabusBodySchema = z.object({
   unit: z.string(),
 });
 export type AdvanceSyllabusBody = z.infer<typeof AdvanceSyllabusBodySchema>;
+
+// -----------------------------------------------------------------------------
+// Book ingestion report — src/server/syllabus/ingest.ts's `ingestBook`, shared
+// by scripts/ingest-book.ts (CLI) and POST /api/syllabus/ingest (Plan page's
+// UI-driven ingest form). Both render the SAME report shape; only the
+// presentation differs (a printed table vs. JSON).
+// -----------------------------------------------------------------------------
+
+/** One section's ingestion outcome within one syllabus unit. */
+export const SectionIngestResultSchema = z.object({
+  unitId: z.string(),
+  sectionId: z.string(),
+  syllabusRef: z.string(),
+  title: z.string(),
+  contentId: z.string(),
+  textLength: z.number().int().nonnegative(),
+  alreadyExisted: z.boolean(),
+});
+export type SectionIngestResult = z.infer<typeof SectionIngestResultSchema>;
+
+/** One construction's ingestion outcome. */
+export const ConstructionIngestResultSchema = z.object({
+  constructionId: z.string(),
+  chunk: z.string(),
+  status: z.enum(["found", "unfound", "already_seeded"]),
+  /** The section id the chunk's first occurrence was found in — only set when `status === "found"`. */
+  foundInSectionId: z.string().optional(),
+});
+export type ConstructionIngestResult = z.infer<typeof ConstructionIngestResultSchema>;
+
+/** One unit's full ingestion outcome — the shape both the CLI and the ingest API render as the per-unit report. */
+export const UnitIngestResultSchema = z.object({
+  unitId: z.string(),
+  title: z.string(),
+  sections: z.array(SectionIngestResultSchema),
+  constructions: z.array(ConstructionIngestResultSchema),
+});
+export type UnitIngestResult = z.infer<typeof UnitIngestResultSchema>;
+
+/** Full ingestion run outcome — returned by `ingestBook` and served as `POST /api/syllabus/ingest`'s `{ report }` body. */
+export const IngestReportSchema = z.object({
+  levelId: z.string(),
+  units: z.array(UnitIngestResultSchema),
+  /** Config sections for which NO page of any given PDF was found (heading never matched) — a real mismatch worth investigating, not just an empty section. */
+  missingSections: z.array(z.string()),
+});
+export type IngestReport = z.infer<typeof IngestReportSchema>;

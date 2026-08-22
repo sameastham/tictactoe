@@ -14,6 +14,7 @@ import { RUNGS, type MasteryBand, type Rung } from "@/lib/taxonomy";
 import { deriveItemMastery } from "@/server/mastery";
 import { getContentBySyllabusRef, getItemsBySyllabusRef } from "@/server/repo";
 import { getSyllabusLevels, getUnit } from "@/server/syllabus/config";
+import type { SyllabusLevel, SyllabusUnit } from "@/lib/contracts";
 
 /** Thrown by {@link recordAdvance} when `level`/`unit` doesn't match any config-defined syllabus unit. */
 export class UnknownSyllabusUnitError extends Error {
@@ -25,15 +26,33 @@ export class UnknownSyllabusUnitError extends Error {
 
 export type ActiveUnit = { level: string; unit: string };
 
+/** The first unit (in config order) of `level` with at least one ingested section, or undefined if none has been. */
+function firstIngestedUnit(db: Db, level: SyllabusLevel): SyllabusUnit | undefined {
+  return level.units.find((unit) =>
+    unit.sections.some((section) => getContentBySyllabusRef(db, `${level.id}/${unit.id}/${section.id}`) !== undefined),
+  );
+}
+
+/**
+ * True when any section of `level` has already been ingested (a `content`
+ * row exists under its `syllabusRef` prefix) — same underlying check
+ * {@link getActiveUnit} uses to find the first ingested level, exposed
+ * separately so the Plan UI can annotate every configured level's ingested
+ * state, not just the currently active one.
+ */
+export function isLevelIngested(db: Db, level: SyllabusLevel): boolean {
+  return firstIngestedUnit(db, level) !== undefined;
+}
+
 /**
  * The learner's current syllabus unit: replays the latest `syllabus_advanced`
  * event (a malformed payload is skipped defensively, same posture as
  * `buildLearnerBlock`'s handling of malformed `produced_error` payloads —
  * see `src/server/learner.ts`). With no such event yet, falls back to the
- * first unit of the lowest-id syllabus level that has ANY ingested content
- * (`didactic: true` rows under that level's `syllabusRef` prefix) — i.e. the
- * first level actually ingested via `npm run ingest-book`. Returns null when
- * no level has been ingested at all (syllabus not started).
+ * first ingested unit ({@link firstIngestedUnit}) of the lowest-id syllabus
+ * level that has any ingested content — i.e. the first level actually
+ * ingested (via `npm run ingest-book` or the Plan page's ingest form).
+ * Returns null when no level has been ingested at all (syllabus not started).
  */
 export function getActiveUnit(db: Db): ActiveUnit | null {
   const advancedEvents = db
@@ -51,20 +70,8 @@ export function getActiveUnit(db: Db): ActiveUnit | null {
 
   const levels = [...getSyllabusLevels()].sort((a, b) => a.id.localeCompare(b.id));
   for (const level of levels) {
-    // Any section of this level ingested at all — cheapest possible check:
-    // the first unit's first section's own syllabusRef, since ingestion
-    // always writes units/sections in config order.
-    const firstUnit = level.units[0];
-    const hasAnySection = firstUnit.sections.some(
-      (section) => getContentBySyllabusRef(db, `${level.id}/${firstUnit.id}/${section.id}`) !== undefined,
-    );
-    // Fall back to scanning every unit's first section, in case the first
-    // unit specifically hasn't been ingested yet but a later one has.
-    if (hasAnySection) return { level: level.id, unit: firstUnit.id };
-    for (const unit of level.units) {
-      const found = unit.sections.some((section) => getContentBySyllabusRef(db, `${level.id}/${unit.id}/${section.id}`) !== undefined);
-      if (found) return { level: level.id, unit: unit.id };
-    }
+    const unit = firstIngestedUnit(db, level);
+    if (unit) return { level: level.id, unit: unit.id };
   }
 
   return null;
