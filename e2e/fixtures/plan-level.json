@@ -1,0 +1,35 @@
+{
+  "id": "fakebook",
+  "series": "dicho-y-hecho",
+  "name": "Fake Book (e2e)",
+  "cefr": "B2+",
+  "units": [
+    {
+      "id": "u1",
+      "title": "Tema de prueba uno",
+      "theme": "tema uno",
+      "sections": [
+        { "id": "s1", "title": "Primera sección de prueba", "objectives": ["obj1"] },
+        { "id": "s2", "title": "Segunda sección de prueba", "objectives": ["obj2"] }
+      ],
+      "constructions": [
+        { "id": "c1", "chunk": "a menos que", "description": "condición negativa", "tag": "grammar" },
+        { "id": "c2", "chunk": "por más que", "description": "concesión", "tag": "discourse" }
+      ],
+      "tareas": [
+        { "id": "t1", "prompt": "Escribe 3-4 frases de prueba usando a menos que.", "targetConstructionIds": ["c1"] }
+      ]
+    },
+    {
+      "id": "u2",
+      "title": "Tema de prueba dos",
+      "theme": "tema dos",
+      "sections": [
+        { "id": "s1", "title": "Tercera sección de prueba", "objectives": ["obj3"] },
+        { "id": "s2", "title": "Cuarta sección de prueba", "objectives": ["obj4"] }
+      ],
+      "constructions": [],
+      "tareas": []
+    }
+  ]
+}

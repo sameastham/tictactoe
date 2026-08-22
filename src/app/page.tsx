@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { getDb } from "@/db";
+import { getDb, type Db } from "@/db";
 import { listContent } from "@/server/repo";
 import { SOURCE_LABELS } from "@/lib/labels";
 import { timeAgo } from "@/lib/time";
 import { ReviewQueue } from "@/components/ReviewQueue";
+import { getLevel, getUnit } from "@/server/syllabus/config";
+import { getActiveUnit, getUnitEvidence } from "@/server/syllabus/progress";
 
 // This page reads the content list straight from sqlite (a synchronous,
 // predictable read Next can't tell is per-request). Without forcing dynamic
@@ -21,6 +23,7 @@ function displayTitle(title: string | null, text: string): string {
 export default function Home() {
   const db = getDb();
   const contents = listContent(db, 20);
+  const planCard = buildPlanCard(db);
 
   return (
     <div className="min-h-dvh">
@@ -30,6 +33,8 @@ export default function Home() {
       </header>
 
       <ReviewQueue />
+
+      {planCard && <PlanCard card={planCard} />}
 
       <main className="px-4 pb-28 pt-4">
         {contents.length === 0 ? (
@@ -70,6 +75,80 @@ export default function Home() {
 
       <FabWrapper />
     </div>
+  );
+}
+
+const PLAN_CARD_PROMPT_PREVIEW_LENGTH = 60;
+
+type PlanCardData = {
+  unitLabel: string;
+  unitTitle: string;
+  nextActionLabel: string;
+  nextActionHref: string;
+  evidenceLine: string;
+};
+
+function truncatePlanText(text: string, max: number): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
+/**
+ * Derives the home page's compact Plan card: the active unit's headline plus
+ * the first unfinished thing to do — an unread section, else an unwritten
+ * tarea, else a nudge to review constructions on `/plan`. Null when there's
+ * no active syllabus unit (nothing ingested yet), which hides the card
+ * entirely.
+ */
+function buildPlanCard(db: Db): PlanCardData | null {
+  const active = getActiveUnit(db);
+  if (!active) return null;
+
+  const level = getLevel(active.level);
+  const unitConfig = getUnit(active.level, active.unit);
+  const evidence = getUnitEvidence(db, active.level, active.unit);
+  if (!level || !unitConfig || !evidence) return null;
+
+  const unitIndex = level.units.findIndex((u) => u.id === active.unit);
+  const unitLabel = unitIndex >= 0 ? `Unidad ${unitIndex + 1}` : "Unidad";
+
+  const unreadSection = evidence.sections.find((s) => s.contentId !== null && s.decidedCount === 0);
+  const unwrittenTarea = evidence.tareas.find((t) => t.writingsCount === 0);
+
+  let nextActionLabel: string;
+  let nextActionHref: string;
+  if (unreadSection) {
+    nextActionLabel = `Lee "${unreadSection.title}"`;
+    nextActionHref = `/read/${unreadSection.contentId}`;
+  } else if (unwrittenTarea) {
+    nextActionLabel = `Escribe: ${truncatePlanText(unwrittenTarea.prompt, PLAN_CARD_PROMPT_PREVIEW_LENGTH)}`;
+    nextActionHref = `/fix/write?tarea=${active.level}/${active.unit}/${unwrittenTarea.tareaId}`;
+  } else {
+    nextActionLabel = "Repasa tus construcciones";
+    nextActionHref = "/plan";
+  }
+
+  const solidCount = evidence.constructions.filter((c) => c.band === "en_progreso" || c.band === "solido").length;
+  const writtenTareas = evidence.tareas.filter((t) => t.writingsCount > 0).length;
+  const evidenceLine = `${solidCount}/${evidence.constructions.length} construcciones · ${writtenTareas}/${evidence.tareas.length} tareas`;
+
+  return { unitLabel, unitTitle: unitConfig.title, nextActionLabel, nextActionHref, evidenceLine };
+}
+
+function PlanCard({ card }: { card: PlanCardData }) {
+  return (
+    <section className="px-4 pt-3">
+      <Link
+        href={card.nextActionHref}
+        data-testid="home-plan-card"
+        className="block rounded-2xl border border-line bg-paper-elevated p-4 shadow-sm transition-colors active:bg-line/30"
+      >
+        <h2 className="text-sm font-semibold text-ink">
+          Plan — {card.unitLabel}: {card.unitTitle}
+        </h2>
+        <p className="mt-1.5 text-[15px] leading-snug text-ink">{card.nextActionLabel}</p>
+        <p className="mt-2 text-xs text-ink-muted">{card.evidenceLine}</p>
+      </Link>
+    </section>
   );
 }
 

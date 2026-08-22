@@ -7,6 +7,8 @@ import type { Candidate, FluencyMetrics, ProducedErrorPayload, TalkTurnMeta } fr
 import { createContent, getSession, recordDecision } from "@/server/repo";
 import { createLanguageService } from "@/server/language/service";
 import { FixtureProvider } from "@/server/language/providers/fixture";
+import { getUnit } from "@/server/syllabus/config";
+import { recordAdvance } from "@/server/syllabus/progress";
 import {
   endTalk,
   getOpenTalkSession,
@@ -163,6 +165,59 @@ describe("seedTopic", () => {
     const { topic, dueItems } = seedTopic(db);
     expect(dueItems.map((i) => i.id)).toEqual([itemId]);
     expect(topic).toBe("¿Cómo va tu semana? A ver si sale natural usar: no tener nada que ver.");
+  });
+
+  it("prefers the active unit's theme over recent content when both exist", () => {
+    createContent(db, {
+      source: "paste",
+      type: "article",
+      title: "Un tema cualquiera de lectura",
+      text: "Un texto de relleno con longitud suficiente para pasar la validación mínima exigida.",
+    });
+    recordAdvance(db, "dyh7", "u1");
+    const unit = getUnit("dyh7", "u1")!;
+
+    const { topic, dueItems } = seedTopic(db);
+    expect(topic).toBe(`Platiquemos del tema de tu unidad: ${unit.theme}…`);
+    expect(topic).not.toContain("Un tema cualquiera de lectura");
+    expect(dueItems).toEqual([]);
+  });
+
+  it("still appends due-item chunks when an active unit exists", () => {
+    recordAdvance(db, "dyh7", "u1");
+    const unit = getUnit("dyh7", "u1")!;
+    const item = seedDueItem(db, { id: "cSyllabus", chunk: "vale mucho la pena" });
+
+    const { topic, dueItems } = seedTopic(db);
+    expect(dueItems.map((i) => i.id)).toEqual([item.itemId]);
+    expect(topic).toBe(`Platiquemos del tema de tu unidad: ${unit.theme}… A ver si sale natural usar: vale mucho la pena.`);
+  });
+
+  it("falls back to recent-content behavior when the active unit's id doesn't resolve to a real config unit", () => {
+    // Defensive path: an advance event pointing at a level/unit combination
+    // that no longer exists in config (e.g. a curriculum edit after the
+    // event was logged) — getActiveUnit still replays it, but getUnit
+    // returns undefined, so seedTopic must fall through cleanly rather than
+    // ever building a topic string around `undefined`.
+    createContent(db, {
+      source: "paste",
+      type: "article",
+      title: "Tema de respaldo",
+      text: "Un texto de relleno con longitud suficiente para pasar la validación mínima exigida.",
+    });
+    db.insert(events)
+      .values({
+        id: newId(),
+        userId: "u_local",
+        type: "syllabus_advanced",
+        surface: "read",
+        payload: { level: "dyh7", unit: "u-does-not-exist" },
+        createdAt: new Date(),
+      })
+      .run();
+
+    const { topic } = seedTopic(db);
+    expect(topic).toBe("Platiquemos de lo que leíste: Tema de respaldo…");
   });
 });
 

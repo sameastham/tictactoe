@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SyllabusLevelSchema } from "@/lib/contracts";
-import { getLevel, getSyllabusLevels, getUnit } from "@/server/syllabus/config";
+import { getLevel, getNextUnit, getSyllabusLevels, getUnit } from "@/server/syllabus/config";
 
 describe("getSyllabusLevels", () => {
   it("loads and validates every config/syllabus/*.json file against SyllabusLevelSchema", () => {
@@ -78,5 +78,21 @@ describe("getUnit", () => {
 
   it("returns undefined for an unknown level", () => {
     expect(getUnit("does-not-exist", "u1")).toBeUndefined();
+  });
+});
+
+describe("getNextUnit", () => {
+  it("returns the next unit within the same level", () => {
+    expect(getNextUnit("dyh7", "u1")).toEqual({ level: "dyh7", unit: "u2" });
+    expect(getNextUnit("dyh7", "u5")).toEqual({ level: "dyh7", unit: "u6" });
+  });
+
+  it("returns null for the last unit of the last level — nothing left to advance to", () => {
+    expect(getNextUnit("dyh7", "u6")).toBeNull();
+  });
+
+  it("returns null for an unknown level or unit", () => {
+    expect(getNextUnit("does-not-exist", "u1")).toBeNull();
+    expect(getNextUnit("dyh7", "u99")).toBeNull();
   });
 });

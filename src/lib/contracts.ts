@@ -543,3 +543,10 @@ export const SyllabusAdvancedPayloadSchema = z.object({
   unit: z.string(),
 });
 export type SyllabusAdvancedPayload = z.infer<typeof SyllabusAdvancedPayloadSchema>;
+
+/** Body of "advance to a new syllabus unit" (POST /api/syllabus/advance) API request. */
+export const AdvanceSyllabusBodySchema = z.object({
+  level: z.string(),
+  unit: z.string(),
+});
+export type AdvanceSyllabusBody = z.infer<typeof AdvanceSyllabusBodySchema>;

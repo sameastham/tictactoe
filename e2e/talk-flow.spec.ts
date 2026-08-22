@@ -48,7 +48,9 @@ test.describe.serial("Talk flow", () => {
     const contentId = ((await contentRes.json()) as { content: { id: string } }).content.id;
     const extractRes = await page.request.post(`/api/content/${contentId}/extract`);
     const candidate = (
-      (await extractRes.json()) as { extraction: { result: { candidates: { id: string; chunk: string }[] } } }
+      (await extractRes.json()) as {
+        extraction: { result: { candidates: { id: string; chunk: string; register: string }[] } };
+      }
     ).extraction.result.candidates[0];
     const decisionRes = await page.request.post("/api/decisions", {
       data: { contentId, candidateId: candidate.id, action: "keep" },
@@ -57,8 +59,11 @@ test.describe.serial("Talk flow", () => {
 
     const res = await page.request.get(`/api/items/by-ids?ids=${itemId},does-not-exist`);
     expect(res.ok()).toBe(true);
-    const data = (await res.json()) as { items: { id: string; chunk: string }[] };
-    expect(data.items).toEqual([{ id: itemId, chunk: candidate.chunk }]);
+    // register rides along too (see src/app/api/items/by-ids/route.ts) — the
+    // Talk credit chips only ever read `chunk`, but the endpoint's shape is
+    // shared with FixComposer's syllabus-construction item lookup, which needs it.
+    const data = (await res.json()) as { items: { id: string; chunk: string; register: string }[] };
+    expect(data.items).toEqual([{ id: itemId, chunk: candidate.chunk, register: candidate.register }]);
   });
 
   test("1. the Hablar tab opens the Talk list with a prominent start button", async () => {
