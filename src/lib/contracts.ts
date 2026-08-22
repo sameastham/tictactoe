@@ -317,6 +317,21 @@ export type ReviewBody = z.infer<typeof ReviewBodySchema>;
 export const PRIORITY_REASONS = ["recurring_error", "weak_category", "recent", "standard"] as const;
 export type PriorityReason = (typeof PRIORITY_REASONS)[number];
 
+/**
+ * Where a syllabus-seeded item comes from, for display on a Repaso card: the
+ * unit whose target construction it is, plus the book section its origin
+ * sentence was found in (null when the construction was seeded "unfound" —
+ * see `ingestBook`). `DueItem.syllabus` is null for items captured through
+ * the ordinary Read/Listen/Fix/Talk surfaces.
+ */
+export const DueItemSyllabusSchema = z.object({
+  level: z.string(),
+  unit: z.string(),
+  unitTitle: z.string(),
+  sectionTitle: z.string().nullable(),
+});
+export type DueItemSyllabus = z.infer<typeof DueItemSyllabusSchema>;
+
 /** A due item as served by `GET /api/items/due` and consumed by the Repaso queue. */
 export const DueItemSchema = z.object({
   id: z.string(),
@@ -324,6 +339,10 @@ export const DueItemSchema = z.object({
   register: z.enum(REGISTERS),
   originSentence: z.string(),
   contrastSet: z.array(z.string()).nullable(),
+  /** The item's one-line rationale (`items.why`) — the Repaso card's optional pre-reveal hint and its post-reveal explanation. */
+  why: z.string(),
+  taxonomy: z.array(z.enum(TAXONOMY)).nullable(),
+  syllabus: DueItemSyllabusSchema.nullable(),
   /** ISO 8601 — the ts-fsrs card's `due` at derivation time. */
   due: z.string(),
   priorityReason: z.enum(PRIORITY_REASONS),

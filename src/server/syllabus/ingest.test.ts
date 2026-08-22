@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 import type { SyllabusLevel } from "@/lib/contracts";
 import {
   bucketPagesBySection,
+  buildConstructionContrastSet,
   buildSectionText,
   findConstructionOccurrence,
   ingestBook,
@@ -269,10 +270,35 @@ describe("ingestBook (fixture)", () => {
     expect(found.originSentence).toContain(found.chunk);
     expect(found.originContentId).not.toBeNull();
     expect(found.taxonomy).toEqual(["grammar"]);
+    // Chunk first, then the same-tag sibling (c3, grammar), then the rest (c2).
+    expect(found.contrastSet).toEqual(["a menos que", "esta frase no existe en el libro falso", "por más que"]);
 
     const unfound = seeded.find((i) => i.chunk === "esta frase no existe en el libro falso")!;
     expect(unfound.originContentId).toBeNull();
     expect(unfound.originSentence).toBe(unfound.chunk);
+    expect(unfound.contrastSet).toEqual(["esta frase no existe en el libro falso", "a menos que", "por más que"]);
+
+    // No same-tag sibling (c2 is the only discourse construction): rivals are the rest in config order.
+    const discourse = seeded.find((i) => i.chunk === "por más que")!;
+    expect(discourse.contrastSet).toEqual(["por más que", "a menos que", "esta frase no existe en el libro falso"]);
+  });
+
+  it("backfills a null contrast set on an already-seeded item when re-run, without touching existing sets", async () => {
+    const db = createTestDb();
+    const buf = loadFixtureBuf();
+    const level = fakeLevel();
+    await ingestBook(db, level, [{ source: "libro-falso.pdf", buf }]);
+
+    // Simulate an item seeded before contrast sets existed.
+    db.update(items).set({ contrastSet: null }).where(eq(items.chunk, "a menos que")).run();
+    const untouchedBefore = db.select().from(items).where(eq(items.chunk, "por más que")).get()!.contrastSet;
+
+    const report = await ingestBook(db, level, [{ source: "libro-falso.pdf", buf }]);
+
+    const backfilled = db.select().from(items).where(eq(items.chunk, "a menos que")).get()!;
+    expect(backfilled.contrastSet).toEqual(["a menos que", "esta frase no existe en el libro falso", "por más que"]);
+    expect(db.select().from(items).where(eq(items.chunk, "por más que")).get()!.contrastSet).toEqual(untouchedBefore);
+    expect(report.units[0].constructions.every((c) => c.status === "already_seeded")).toBe(true);
   });
 
   it("is idempotent: re-running against the same DB inserts nothing new", async () => {
@@ -309,5 +335,37 @@ describe("buildSectionText", () => {
     ];
     const text = buildSectionText(pages, "Sección de prueba", "Unidad de prueba");
     expect(text).toBe("Contenido real de la sección.");
+  });
+});
+
+describe("buildConstructionContrastSet", () => {
+  const unit = fakeLevel().units[0];
+
+  it("puts the (actual-casing) chunk first, same-tag siblings next, then the rest", () => {
+    const c1 = unit.constructions[0]; // grammar
+    expect(buildConstructionContrastSet(unit, c1, "A menos que")).toEqual([
+      "A menos que",
+      "esta frase no existe en el libro falso",
+      "por más que",
+    ]);
+  });
+
+  it("caps rivals at three", () => {
+    const big = {
+      ...unit,
+      constructions: Array.from({ length: 6 }, (_, i) => ({
+        id: `c${i}`,
+        chunk: `frase ${i}`,
+        description: "d",
+        tag: "grammar" as const,
+      })),
+    };
+    const set = buildConstructionContrastSet(big, big.constructions[0]);
+    expect(set).toEqual(["frase 0", "frase 1", "frase 2", "frase 3"]);
+  });
+
+  it("returns null when the unit has no other construction to contrast against", () => {
+    const lone = { ...unit, constructions: [unit.constructions[0]] };
+    expect(buildConstructionContrastSet(lone, lone.constructions[0])).toBeNull();
   });
 });

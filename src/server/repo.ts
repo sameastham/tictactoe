@@ -756,6 +756,8 @@ export type SeedConstructionItemInput = {
   tag: TaxonomyTag;
   /** "{levelId}/{unitId}", e.g. "dyh7/u4". */
   syllabusRef: string;
+  /** Chunk first, then sibling constructions as rivals — see `buildConstructionContrastSet` in `src/server/syllabus/ingest.ts`. Null when the unit has nothing to contrast against. */
+  contrastSet: string[] | null;
 };
 
 /**
@@ -768,7 +770,7 @@ export type SeedConstructionItemInput = {
  * here either, so one is synthesized, matching `captureFromMiss`'s posture.
  */
 export function seedConstructionItem(db: Db, input: SeedConstructionItemInput): { itemId: string } {
-  const { chunk, originContentId, originSentence, why, tag, syllabusRef } = input;
+  const { chunk, originContentId, originSentence, why, tag, syllabusRef, contrastSet } = input;
 
   return db.transaction((tx) => {
     const now = new Date();
@@ -780,7 +782,7 @@ export function seedConstructionItem(db: Db, input: SeedConstructionItemInput): 
         userId: DEFAULT_USER_ID,
         chunk,
         register: "neutral",
-        contrastSet: null,
+        contrastSet,
         originContentId,
         originSentence,
         why,
@@ -796,7 +798,7 @@ export function seedConstructionItem(db: Db, input: SeedConstructionItemInput): 
       origin_sentence: originSentence,
       register: "neutral",
       why,
-      contrast_set: null,
+      contrast_set: contrastSet,
       taxonomy: [tag],
     };
     const payload: CapturedPayload = { candidateId: candidate.id, candidate, promptVersion: "syllabus" };
@@ -820,6 +822,16 @@ export function seedConstructionItem(db: Db, input: SeedConstructionItemInput): 
 /** Every item row already carrying a given `syllabusRef` (idempotency check for ingestion). */
 export function getItemsBySyllabusRef(db: Db, syllabusRef: string): ItemRow[] {
   return db.select().from(items).where(eq(items.syllabusRef, syllabusRef)).all();
+}
+
+/**
+ * Sets one item's `contrast_set` — used by `ingestBook` to backfill
+ * construction items seeded before contrast sets existed. `items` is
+ * mutable state (only `events` is append-only); the item's original
+ * `captured` event keeps the candidate exactly as it was at capture time.
+ */
+export function setItemContrastSet(db: Db, itemId: string, contrastSet: string[] | null): void {
+  db.update(items).set({ contrastSet }).where(eq(items.id, itemId)).run();
 }
 
 // -----------------------------------------------------------------------------

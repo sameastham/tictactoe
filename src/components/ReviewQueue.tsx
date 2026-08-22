@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { PriorityReason, ReviewRating } from "@/lib/contracts";
-import type { Register } from "@/lib/taxonomy";
+import type { DueItemSyllabus, PriorityReason, ReviewRating } from "@/lib/contracts";
+import { TAXONOMY_LABELS } from "@/lib/labels";
+import type { Register, TaxonomyTag } from "@/lib/taxonomy";
 
 interface DueCardItem {
   id: string;
@@ -10,6 +11,9 @@ interface DueCardItem {
   register: Register;
   originSentence: string;
   contrastSet: string[] | null;
+  why: string;
+  taxonomy: TaxonomyTag[] | null;
+  syllabus: DueItemSyllabus | null;
   due: string;
   priorityReason: PriorityReason;
 }
@@ -142,6 +146,15 @@ function ReviewCard({
   onReveal: () => void;
   onRate: (rating: QueueRating) => void;
 }) {
+  // "Pista" is opt-in and separate from reveal: the card stays a production
+  // prompt by default, but the learner can ask what's being tested before
+  // committing. The `why` line sometimes names the answer outright, which is
+  // why it's behind a tap rather than always shown pre-reveal.
+  const [hintShown, setHintShown] = useState(false);
+  const tags = card.item.taxonomy ?? [];
+  const origin = card.item.syllabus;
+  const originLabel = origin ? (origin.sectionTitle ? `${origin.unitTitle} · ${origin.sectionTitle}` : origin.unitTitle) : null;
+
   return (
     <div
       data-testid="review-card"
@@ -152,22 +165,68 @@ function ReviewCard({
         (leaving ? " card-slide-away" : "")
       }
     >
+      {(tags.length > 0 || originLabel) && (
+        <div className="mb-2.5 flex flex-col gap-1.5">
+          {tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {tags.map((tag) => (
+                <span
+                  key={tag}
+                  data-testid="review-card-tag"
+                  className="rounded-full border border-line px-2 py-0.5 text-[11px] font-medium uppercase tracking-wide text-ink-muted"
+                >
+                  {TAXONOMY_LABELS[tag]}
+                </span>
+              ))}
+            </div>
+          )}
+          {originLabel && (
+            <p data-testid="review-card-origin" className="truncate text-[11px] text-ink-muted">
+              {originLabel}
+            </p>
+          )}
+        </div>
+      )}
+
       {!revealed ? (
-        <button
-          type="button"
-          data-testid="review-card-prompt"
-          onClick={onReveal}
-          disabled={pending}
-          className="block w-full text-left"
-        >
-          <p className="text-[15px] leading-relaxed text-ink">{renderCloze(card.cloze)}</p>
-          <p className="mt-3 text-xs font-medium text-ink-muted">Toca para revelar</p>
-        </button>
+        <>
+          <button
+            type="button"
+            data-testid="review-card-prompt"
+            onClick={onReveal}
+            disabled={pending}
+            className="block w-full text-left"
+          >
+            <p className="text-[15px] leading-relaxed text-ink">{renderCloze(card.cloze)}</p>
+            <p className="mt-3 text-xs font-medium text-ink-muted">Toca para revelar</p>
+          </button>
+          {hintShown ? (
+            <p
+              data-testid="review-card-hint"
+              className="mt-3 border-t border-line pt-3 text-sm leading-snug text-ink-muted"
+            >
+              {card.item.why}
+            </p>
+          ) : (
+            <button
+              type="button"
+              data-testid="review-card-hint-toggle"
+              onClick={() => setHintShown(true)}
+              disabled={pending}
+              className="mt-3 text-xs font-semibold text-accent-strong disabled:opacity-60"
+            >
+              Pista
+            </button>
+          )}
+        </>
       ) : (
         <div className="flex flex-col gap-3">
           <p className="text-[15px] leading-relaxed text-ink-muted">{renderCloze(card.cloze)}</p>
           <p data-testid="review-card-answer" className="text-lg font-semibold text-accent-strong">
             {card.answer}
+          </p>
+          <p data-testid="review-card-why" className="text-sm leading-snug text-ink-muted">
+            {card.item.why}
           </p>
 
           {card.contrast && card.contrast.length > 0 && (
