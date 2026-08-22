@@ -34,7 +34,7 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-dvh">
-      <header className="px-4 pt-6 pb-2">
+      <header className="px-4 pt-6 pb-2 lg:mx-auto lg:max-w-4xl lg:px-10 lg:pt-8">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Perfil</h1>
@@ -46,12 +46,13 @@ export default function ProfilePage() {
         </div>
       </header>
 
-      <main className="flex flex-col gap-4 px-4 pb-28 pt-4">
+      <main className="flex flex-col gap-4 px-4 pb-28 pt-4 lg:mx-auto lg:max-w-4xl lg:gap-5 lg:px-10 lg:pb-16 lg:pt-6">
+        {/* Headline section stays full-width at lg — it's the "what's blocking you" answer, not a peer of the two lists below. */}
         <Section title="Qué te está frenando" testId="profile-blocking">
           {blocking.length === 0 ? (
             <p className="text-sm text-ink-muted">Aún no hay suficientes datos — escribe y platica más.</p>
           ) : (
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-3">
               {blocking.map((entry) => (
                 <BlockingCard key={entry.tag} entry={entry} />
               ))}
@@ -59,36 +60,43 @@ export default function ProfilePage() {
           )}
         </Section>
 
-        <Section title="Ítems más frágiles" testId="profile-weakest-items">
-          {weakestItems.length === 0 ? (
-            <p className="text-sm text-ink-muted">Todavía no has capturado ningún ítem.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {weakestItems.map((entry) => (
-                <WeakItemRow key={entry.item.id} entry={entry} />
+        {/*
+          Same zero-mobile-impact wrapper idiom as elsewhere: `gap-4` here
+          matches `main`'s own gap, so mobile spacing between this pair and
+          the section above is unchanged; `lg:grid` puts them side by side.
+        */}
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-5">
+          <Section title="Ítems más frágiles" testId="profile-weakest-items">
+            {weakestItems.length === 0 ? (
+              <p className="text-sm text-ink-muted">Todavía no has capturado ningún ítem.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {weakestItems.map((entry) => (
+                  <WeakItemRow key={entry.item.id} entry={entry} />
+                ))}
+              </ul>
+            )}
+          </Section>
+
+          <Section title="Por categoría" testId="profile-categories">
+            <ul className="flex flex-col gap-2.5">
+              {categories.map((entry) => (
+                <li
+                  key={entry.tag}
+                  data-testid="category-row"
+                  data-tag={entry.tag}
+                  className="flex items-center justify-between text-sm"
+                >
+                  <span className="text-ink">{TAXONOMY_LABELS[entry.tag]}</span>
+                  <span className="flex items-center gap-2">
+                    {entry.trend && <TrendArrow trend={entry.trend} />}
+                    <BandChip band={entry.band} />
+                  </span>
+                </li>
               ))}
             </ul>
-          )}
-        </Section>
-
-        <Section title="Por categoría" testId="profile-categories">
-          <ul className="flex flex-col gap-2.5">
-            {categories.map((entry) => (
-              <li
-                key={entry.tag}
-                data-testid="category-row"
-                data-tag={entry.tag}
-                className="flex items-center justify-between text-sm"
-              >
-                <span className="text-ink">{TAXONOMY_LABELS[entry.tag]}</span>
-                <span className="flex items-center gap-2">
-                  {entry.trend && <TrendArrow trend={entry.trend} />}
-                  <BandChip band={entry.band} />
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Section>
+          </Section>
+        </div>
       </main>
     </div>
   );

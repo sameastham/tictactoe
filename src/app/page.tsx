@@ -273,6 +273,7 @@ function FabWrapper() {
         <Link
           href="/add"
           aria-label="Agregar contenido"
+          data-testid="home-add-fab"
           className="pointer-events-auto absolute bottom-5 right-5 flex h-14 w-14 items-center justify-center rounded-full bg-accent text-accent-fg shadow-lg shadow-black/20 transition-transform active:scale-95"
         >
           <svg viewBox="0 0 24 24" fill="none" className="h-7 w-7" aria-hidden="true">

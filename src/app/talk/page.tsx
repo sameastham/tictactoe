@@ -28,18 +28,18 @@ export default function TalkPage() {
 
   return (
     <div className="min-h-dvh">
-      <header className="px-4 pt-6 pb-2">
+      <header className="px-4 pt-6 pb-2 lg:mx-auto lg:max-w-3xl lg:px-10 lg:pt-8">
         <h1 className="text-2xl font-bold tracking-tight">Hablar</h1>
         <p className="mt-0.5 text-sm text-ink-muted">Conversación libre — sin correcciones a media plática</p>
       </header>
 
-      <main className="px-4 pb-28 pt-4">
+      <main className="px-4 pb-28 pt-4 lg:mx-auto lg:max-w-3xl lg:px-10 lg:pb-16 lg:pt-2">
         <StartTalkButton />
 
         {sessionRows.length === 0 ? (
           <EmptyState />
         ) : (
-          <ul className="mt-6 flex flex-col gap-3" data-testid="talk-sessions-list">
+          <ul className="mt-6 flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-4" data-testid="talk-sessions-list">
             {sessionRows.map((row) => {
               const duration = formatDuration(row.durationS);
               return (

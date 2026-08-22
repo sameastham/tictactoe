@@ -272,7 +272,7 @@ export function FixComposer({ tarea }: { tarea?: TareaPreset } = {}) {
           placeholder="Escribe en español…"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          className="min-h-40 rounded-xl border border-line bg-paper-elevated px-4 py-3 text-base leading-relaxed text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25"
+          className="min-h-40 rounded-xl border border-line bg-paper-elevated px-4 py-3 text-base leading-relaxed text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/25 lg:min-h-64"
         />
       </div>
 

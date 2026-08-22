@@ -42,7 +42,7 @@ export default function ReportPage() {
 
   return (
     <div className="min-h-dvh">
-      <header className="px-4 pt-6 pb-2">
+      <header className="px-4 pt-6 pb-2 lg:mx-auto lg:max-w-4xl lg:px-10 lg:pt-8">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Reporte</h1>
@@ -59,7 +59,14 @@ export default function ReportPage() {
         </div>
       </header>
 
-      <main className="flex flex-col gap-4 px-4 pb-28 pt-4">
+      {/*
+        Five flat sibling section cards, in reading order — `lg:grid
+        lg:grid-cols-2` pairs them 2-up exactly as written (Esta semana +
+        Transferencia, Categorías + Dictado), no explicit placement needed;
+        Evaluador (the odd one out) spans both columns via `wide` below
+        rather than leaving a half-empty last row.
+      */}
+      <main className="flex flex-col gap-4 px-4 pb-28 pt-4 lg:mx-auto lg:grid lg:max-w-4xl lg:grid-cols-2 lg:gap-4 lg:px-10 lg:pb-16 lg:pt-6">
         <Section title="Esta semana" testId="report-week">
           <div className="flex items-center justify-between">
             {days.map((day) => {
@@ -142,7 +149,7 @@ export default function ReportPage() {
           )}
         </Section>
 
-        <Section title="Evaluador" testId="report-eval">
+        <Section title="Evaluador" testId="report-eval" wide>
           {report.latestEval ? (
             <EvalSummary evalRun={report.latestEval} />
           ) : (
@@ -156,11 +163,22 @@ export default function ReportPage() {
   );
 }
 
-function Section({ title, testId, children }: { title: string; testId: string; children: React.ReactNode }) {
+function Section({
+  title,
+  testId,
+  children,
+  wide = false,
+}: {
+  title: string;
+  testId: string;
+  children: React.ReactNode;
+  /** Spans both columns of the `lg:` 2-col grid instead of pairing with a neighbor — for the odd one out. */
+  wide?: boolean;
+}) {
   return (
     <section
       data-testid={testId}
-      className="rounded-2xl border border-line bg-paper-elevated p-4 shadow-sm"
+      className={`rounded-2xl border border-line bg-paper-elevated p-4 shadow-sm${wide ? " lg:col-span-2" : ""}`}
     >
       <h2 className="text-sm font-semibold text-ink-muted">{title}</h2>
       <div className="mt-2">{children}</div>

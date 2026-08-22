@@ -30,7 +30,7 @@ export default function ListenPage() {
 
   return (
     <div className="min-h-dvh">
-      <header className="flex items-center justify-between gap-3 px-4 pt-6 pb-2">
+      <header className="flex items-center justify-between gap-3 px-4 pt-6 pb-2 lg:mx-auto lg:max-w-3xl lg:px-10 lg:pt-8">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Escuchar</h1>
           <p className="mt-0.5 text-sm text-ink-muted">Dictado a partir de audio real</p>
@@ -44,11 +44,11 @@ export default function ListenPage() {
         </Link>
       </header>
 
-      <main className="px-4 pb-28 pt-4">
+      <main className="px-4 pb-28 pt-4 lg:mx-auto lg:max-w-3xl lg:px-10 lg:pb-16 lg:pt-2">
         {audioContents.length === 0 ? (
           <EmptyState />
         ) : (
-          <ul className="flex flex-col gap-3" data-testid="listen-list">
+          <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-4" data-testid="listen-list">
             {audioContents.map((row) => {
               const lastWord = row.wordTimestamps?.at(-1);
               const duration = lastWord ? formatDuration(lastWord.endMs) : null;

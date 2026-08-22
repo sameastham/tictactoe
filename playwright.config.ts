@@ -7,12 +7,21 @@ import { defineConfig, devices } from "@playwright/test";
  * STT_PROVIDER forced to their deterministic fixture implementations — no
  * network calls, no API key, no python/faster-whisper env needed. Single
  * worker: all tests share one DB, so they must run serially, never in
- * parallel.
+ * parallel — including across projects (see `workers: 1` below), since the
+ * desktop project (added for the desktop-layout wave) runs against the SAME
+ * webServer/DB the mobile project does.
  */
+
+/** Desktop specs are named `desktop-*.spec.ts` — kept out of the mobile project's run (`testIgnore` below) so nothing double-runs. */
+const DESKTOP_SPEC_PATTERN = /desktop-.*\.spec\.ts$/;
+
 export default defineConfig({
   testDir: "./e2e",
   globalSetup: "./e2e/global-setup.ts",
   fullyParallel: false,
+  // Shared across every project in this run (not per-project) — both
+  // projects hit the same `.tmp/e2e.db` through the one `webServer` below,
+  // so mobile and desktop specs must still never run concurrently.
   workers: 1,
   retries: 0,
   reporter: "list",
@@ -23,6 +32,7 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
+      testIgnore: DESKTOP_SPEC_PATTERN,
       use: {
         ...devices["Pixel 7"],
         // Fake mic stream + auto-granted mic permission, so the Talk voice
@@ -32,6 +42,19 @@ export default defineConfig({
         launchOptions: {
           args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"],
         },
+      },
+    },
+    {
+      // Desktop-layout wave: a 1440x900 desktop-Chrome project running only
+      // `desktop-*.spec.ts` files, against the exact same webServer/DB as
+      // the mobile project above. Playwright runs projects in the array
+      // order given here, so this always runs after `chromium` within one
+      // `npm run e2e` invocation.
+      name: "desktop-chromium",
+      testMatch: DESKTOP_SPEC_PATTERN,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 900 },
       },
     },
   ],
