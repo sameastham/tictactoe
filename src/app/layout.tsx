@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { TabBar } from "@/components/TabBar";
+import { SideNav } from "@/components/SideNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -34,8 +35,24 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body className="mx-auto min-h-dvh max-w-md antialiased">
-        {children}
+      {/*
+        Mobile: `body` itself used to carry `mx-auto max-w-md`, capping and
+        centering the whole app as one phone-width column. That constraint
+        now lives on this inner wrapper div instead, one level down — at
+        every width below `lg:` the wrapper renders the exact same box
+        (same classes, just moved down a level), so mobile output is
+        unchanged. At `lg:` the wrapper drops the cap (`lg:max-w-none`) and
+        offsets past the fixed sidebar (`lg:pl-[230px]`), letting each page
+        own its own desktop-width content region instead of being frozen
+        into one shared phone column.
+
+        `SideNav`/`TabBar` are unaffected by this move: both already escape
+        `body`'s own box via `position: fixed` (see their doc comments), so
+        they never depended on which element carried the width cap.
+      */}
+      <body className="min-h-dvh antialiased">
+        <SideNav />
+        <div className="mx-auto min-h-dvh max-w-md lg:mx-0 lg:max-w-none lg:pl-[230px]">{children}</div>
         <TabBar />
       </body>
     </html>

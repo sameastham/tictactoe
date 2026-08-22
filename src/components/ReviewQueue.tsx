@@ -51,6 +51,12 @@ function renderCloze(cloze: string) {
  * Fetches its own data client-side (the home route is already
  * `force-dynamic`; fetching here keeps the server component simple and the
  * queue fresh on every visit without threading state through the page).
+ *
+ * `lg:order-2 lg:px-0 lg:pt-0`: on the home page's `lg:` two-column top
+ * region (Plan left, Repaso right), the grid parent already owns spacing —
+ * this zeroes its own `px-4 pt-3` there and reorders after `PlanCard`
+ * without touching DOM order (mobile keeps Repaso first, above Plan).
+ * No-ops below `lg:`.
  */
 export function ReviewQueue() {
   const [cards, setCards] = useState<QueueCardDto[] | null>(null);
@@ -98,7 +104,7 @@ export function ReviewQueue() {
   if (cards === null || cards.length === 0) return null;
 
   return (
-    <section className="px-4 pt-3" data-testid="review-queue">
+    <section className="px-4 pt-3 lg:order-2 lg:px-0 lg:pt-0" data-testid="review-queue">
       <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Repaso</h2>
       <div
         data-testid="review-queue-track"

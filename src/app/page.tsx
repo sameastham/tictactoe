@@ -27,20 +27,36 @@ export default function Home() {
 
   return (
     <div className="min-h-dvh">
-      <header className="px-4 pt-6 pb-2">
-        <h1 className="text-2xl font-bold tracking-tight">Español Coach</h1>
-        <p className="mt-0.5 text-sm text-ink-muted">Tu entrenador de español mexicano</p>
+      <header className="flex items-start justify-between gap-3 px-4 pt-6 pb-2 lg:mx-auto lg:max-w-5xl lg:px-10 lg:pt-8">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold tracking-tight">Español Coach</h1>
+          <p className="mt-0.5 text-sm text-ink-muted">Tu entrenador de español mexicano</p>
+        </div>
+        <Link
+          href="/add"
+          data-testid="home-add-desktop"
+          className="hidden shrink-0 rounded-full bg-accent px-5 text-sm font-semibold text-accent-fg active:opacity-90 lg:flex lg:h-11 lg:items-center"
+        >
+          Agregar contenido
+        </Link>
       </header>
 
-      <ReviewQueue />
+      {/*
+        At `lg:` Plan (left) and Repaso (right) sit side by side; below
+        that `lg:`, this wrapper div carries no classes of its own, so
+        `ReviewQueue`/`PlanCard` render as the exact same two siblings,
+        with the exact same own `px-4 pt-3`, stacking exactly as before.
+      */}
+      <div className="lg:mx-auto lg:grid lg:max-w-5xl lg:grid-cols-2 lg:items-start lg:gap-5 lg:px-10 lg:pt-3">
+        <ReviewQueue />
+        {planCard && <PlanCard card={planCard} />}
+      </div>
 
-      {planCard && <PlanCard card={planCard} />}
-
-      <main className="px-4 pb-28 pt-4">
+      <main className="px-4 pb-28 pt-4 lg:mx-auto lg:max-w-5xl lg:px-10 lg:pb-16 lg:pt-2">
         {contents.length === 0 ? (
           <EmptyState />
         ) : (
-          <ul className="flex flex-col gap-3">
+          <ul className="flex flex-col gap-3 lg:grid lg:grid-cols-2 lg:gap-4">
             {contents.map((row) => {
               const total = row.candidateCount;
               const hasExtraction = row.extraction !== null;
@@ -134,9 +150,10 @@ function buildPlanCard(db: Db): PlanCardData | null {
   return { unitLabel, unitTitle: unitConfig.title, nextActionLabel, nextActionHref, evidenceLine };
 }
 
+/** `lg:order-1 lg:px-0 lg:pt-0`: mirrors `ReviewQueue`'s own note — reorders ahead of Repaso in the `lg:` grid without touching mobile DOM order (Plan already renders second on mobile, below Repaso). */
 function PlanCard({ card }: { card: PlanCardData }) {
   return (
-    <section className="px-4 pt-3">
+    <section className="px-4 pt-3 lg:order-1 lg:px-0 lg:pt-0">
       <Link
         href={card.nextActionHref}
         data-testid="home-plan-card"
@@ -204,11 +221,14 @@ function EmptyState() {
  * bottom-right of the *reading column* rather than the physical screen edge
  * on wide desktop viewports. The extra 4rem of bottom padding clears the
  * fixed `TabBar` (h-16 = 4rem) rendered underneath it in the root layout.
+ *
+ * `lg:hidden`: at `lg:` this is replaced by the plain "Agregar contenido"
+ * button in the page header above — the FAB stays a mobile-only affordance.
  */
 function FabWrapper() {
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center lg:hidden"
       style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom))" }}
     >
       <div className="relative w-full max-w-md">

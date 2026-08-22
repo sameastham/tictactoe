@@ -117,7 +117,8 @@ const TABS = [
  * inner column — same escape-the-ancestor-column technique as `FabWrapper`
  * on the home page, for the same reason (position:fixed ignores body's own
  * `max-w-md`). Hidden on immersive detail views (`/read/[id]`, `/fix/[id]`,
- * `/listen/[id]`, `/talk/[sessionId]`).
+ * `/listen/[id]`, `/talk/[sessionId]`), and hidden outright at `lg:` widths
+ * (`SideNav` takes over there, on every route including the detail ones).
  */
 export function TabBar() {
   const pathname = usePathname();
@@ -125,7 +126,7 @@ export function TabBar() {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 flex justify-center lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       <nav
