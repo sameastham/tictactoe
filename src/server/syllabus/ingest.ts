@@ -14,7 +14,9 @@ import type {
   ConstructionIngestResult,
   IngestReport,
   SectionIngestResult,
+  SyllabusConstruction,
   SyllabusLevel,
+  SyllabusUnit,
   UnitIngestResult,
 } from "@/lib/contracts";
 import { cleanPdfText } from "@/server/pdf";
@@ -27,7 +29,13 @@ import { cleanPdfText } from "@/server/pdf";
 // Re-exported here so existing imports (`scripts/ingest-book.ts`,
 // `ingest.test.ts`) keep working unchanged.
 export type { ConstructionIngestResult, IngestReport, SectionIngestResult, UnitIngestResult };
-import { createContent, getContentBySyllabusRef, getItemsBySyllabusRef, seedConstructionItem } from "@/server/repo";
+import {
+  createContent,
+  getContentBySyllabusRef,
+  getItemsBySyllabusRef,
+  seedConstructionItem,
+  setItemContrastSet,
+} from "@/server/repo";
 
 // -----------------------------------------------------------------------------
 // Stage 1: per-page text extraction
@@ -431,6 +439,35 @@ export function findConstructionOccurrence(text: string, chunk: string): Constru
 /** One whole-PDF input to {@link ingestBook}: a human-readable source label (for diagnostics) and its raw bytes. */
 export type IngestPdfInput = { source: string; buf: Buffer };
 
+/** Max rival expressions alongside a seeded construction — keeps the set within the extract prompt's 2–4 members (chunk included). */
+const MAX_CONTRAST_RIVALS = 3;
+
+/**
+ * The contrast set for one of `unit`'s target constructions: `chunk` itself
+ * first (the Repaso card highlights index 0 — the same convention as
+ * model-extracted `contrast_set`s, which include the head expression as a
+ * member), then up to three sibling constructions from the same unit as
+ * rivals — same-tag siblings first, the rest in config order. A unit's
+ * constructions are exactly the set the book asks the learner to choose
+ * between, so they're real rivals, not invented ones. Null when the unit has
+ * no other construction: nothing genuine to contrast against, and the
+ * extract prompt's "do not invent a contrast set" posture applies here too.
+ * Pure; `chunk` defaults to the config's casing, callers pass the actual
+ * casing seeded (see `findConstructionOccurrence`).
+ */
+export function buildConstructionContrastSet(
+  unit: SyllabusUnit,
+  construction: SyllabusConstruction,
+  chunk: string = construction.chunk,
+): string[] | null {
+  const siblings = unit.constructions.filter((candidate) => candidate.id !== construction.id);
+  if (siblings.length === 0) return null;
+  const sameTag = siblings.filter((candidate) => candidate.tag === construction.tag);
+  const otherTags = siblings.filter((candidate) => candidate.tag !== construction.tag);
+  const rivals = [...sameTag, ...otherTags].slice(0, MAX_CONTRAST_RIVALS).map((candidate) => candidate.chunk);
+  return [chunk, ...rivals];
+}
+
 /**
  * Runs the full book -> content/items ingestion pipeline for one syllabus
  * level, against however many PDF parts make it up — PASSED IN BOOK ORDER
@@ -504,13 +541,20 @@ export async function ingestBook(db: Db, level: SyllabusLevel, pdfs: IngestPdfIn
     // case-insensitively too, or a re-run would seed a "new" duplicate item
     // every time for any construction whose only real occurrence was
     // sentence-initial/capitalized.
-    const alreadySeededChunksLower = new Set(
-      getItemsBySyllabusRef(db, unitSyllabusRef).map((item) => item.chunk.toLowerCase()),
+    const alreadySeededByChunkLower = new Map(
+      getItemsBySyllabusRef(db, unitSyllabusRef).map((item) => [item.chunk.toLowerCase(), item] as const),
     );
     const constructionResults: ConstructionIngestResult[] = [];
 
     for (const construction of unit.constructions) {
-      if (alreadySeededChunksLower.has(construction.chunk.toLowerCase())) {
+      const alreadySeeded = alreadySeededByChunkLower.get(construction.chunk.toLowerCase());
+      if (alreadySeeded) {
+        // Items seeded before contrast sets existed carry none — backfill on
+        // re-run so they drill like freshly seeded ones. Only a null set is
+        // touched; a set that's already there is never overwritten.
+        if (!alreadySeeded.contrastSet) {
+          setItemContrastSet(db, alreadySeeded.id, buildConstructionContrastSet(unit, construction, alreadySeeded.chunk));
+        }
         constructionResults.push({ constructionId: construction.id, chunk: construction.chunk, status: "already_seeded" });
         continue;
       }
@@ -532,6 +576,7 @@ export async function ingestBook(db: Db, level: SyllabusLevel, pdfs: IngestPdfIn
           why: construction.description,
           tag: construction.tag,
           syllabusRef: unitSyllabusRef,
+          contrastSet: buildConstructionContrastSet(unit, construction, found.occurrence.matchedChunk),
         });
         constructionResults.push({
           constructionId: construction.id,
@@ -554,6 +599,7 @@ export async function ingestBook(db: Db, level: SyllabusLevel, pdfs: IngestPdfIn
           why: construction.description,
           tag: construction.tag,
           syllabusRef: unitSyllabusRef,
+          contrastSet: buildConstructionContrastSet(unit, construction),
         });
         constructionResults.push({ constructionId: construction.id, chunk: construction.chunk, status: "unfound" });
       }

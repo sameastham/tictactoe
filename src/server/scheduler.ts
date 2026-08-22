@@ -14,7 +14,9 @@
 import { and, eq, gte, inArray } from "drizzle-orm";
 import { createEmptyCard, fsrs, Rating, type Card, type Grade } from "ts-fsrs";
 import type { Db } from "@/db";
-import { events, items } from "@/db/schema";
+import { content, events, items } from "@/db/schema";
+import type { DueItemSyllabus } from "@/lib/contracts";
+import { getUnit } from "@/server/syllabus/config";
 import { DEFAULT_USER_ID } from "@/lib/ids";
 import {
   DueItemSchema,
@@ -205,16 +207,66 @@ function priorityReasonFor(
   return "standard";
 }
 
-function toDueItemDto(item: ItemRow, card: Card, priorityReason: PriorityReason): DueItem {
+function toDueItemDto(
+  item: ItemRow,
+  card: Card,
+  priorityReason: PriorityReason,
+  syllabus: DueItemSyllabus | null,
+): DueItem {
   return DueItemSchema.parse({
     id: item.id,
     chunk: item.chunk,
     register: item.register,
     originSentence: item.originSentence,
     contrastSet: item.contrastSet ?? null,
+    why: item.why,
+    taxonomy: item.taxonomy ?? null,
+    syllabus,
     due: card.due.toISOString(),
     priorityReason,
   });
+}
+
+/**
+ * Resolves the display origin of every syllabus-seeded item in `rows`
+ * (`items.syllabus_ref` = "{level}/{unit}") to its configured unit title
+ * and, through the origin content row's own `syllabus_ref`
+ * ("{level}/{unit}/{section}"), its section title. One content query for
+ * the whole batch. Items whose ref no longer resolves to a configured unit
+ * are simply absent from the map (their card shows no origin), the same as
+ * items captured through the ordinary surfaces.
+ */
+function resolveSyllabusOrigins(db: Db, rows: ItemRow[]): Map<string, DueItemSyllabus> {
+  const origins = new Map<string, DueItemSyllabus>();
+  const syllabusRows = rows.filter((row) => row.syllabusRef !== null);
+  if (syllabusRows.length === 0) return origins;
+
+  const originContentIds = [
+    ...new Set(syllabusRows.flatMap((row) => (row.originContentId ? [row.originContentId] : []))),
+  ];
+  const sectionRefByContentId = new Map<string, string | null>();
+  if (originContentIds.length > 0) {
+    const contentRows = db
+      .select({ id: content.id, syllabusRef: content.syllabusRef })
+      .from(content)
+      .where(inArray(content.id, originContentIds))
+      .all();
+    for (const row of contentRows) sectionRefByContentId.set(row.id, row.syllabusRef);
+  }
+
+  for (const row of syllabusRows) {
+    const unitRef = row.syllabusRef!;
+    const [level, unitId] = unitRef.split("/");
+    const unit = level && unitId ? getUnit(level, unitId) : undefined;
+    if (!unit) continue;
+
+    const sectionRef = row.originContentId ? (sectionRefByContentId.get(row.originContentId) ?? null) : null;
+    const sectionId = sectionRef?.startsWith(`${unitRef}/`) ? sectionRef.slice(unitRef.length + 1) : null;
+    const section = sectionId ? unit.sections.find((candidate) => candidate.id === sectionId) : undefined;
+
+    origins.set(row.id, { level, unit: unitId, unitTitle: unit.title, sectionTitle: section?.title ?? null });
+  }
+  return origins;
 }
 
 /**
@@ -260,7 +312,14 @@ export function getDueItems(db: Db, limit = 20, now: Date = new Date()): DueItem
     return bucketDiff !== 0 ? bucketDiff : a.card.due.getTime() - b.card.due.getTime();
   });
 
-  return dueRows.slice(0, limit).map(({ item, card, priorityReason }) => toDueItemDto(item, card, priorityReason));
+  const limited = dueRows.slice(0, limit);
+  const syllabusById = resolveSyllabusOrigins(
+    db,
+    limited.map(({ item }) => item),
+  );
+  return limited.map(({ item, card, priorityReason }) =>
+    toDueItemDto(item, card, priorityReason, syllabusById.get(item.id) ?? null),
+  );
 }
 
 /** One home-screen Repaso card: the cloze prompt plus what answering it needs. */

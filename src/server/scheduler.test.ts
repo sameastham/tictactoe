@@ -5,7 +5,8 @@ import { events, items } from "@/db/schema";
 import { DEFAULT_USER_ID, newId } from "@/lib/ids";
 import type { Candidate, ItemAvoidedPayload, ProducedOkPayload, ReviewedPayload } from "@/lib/contracts";
 import type { TaxonomyTag } from "@/lib/taxonomy";
-import { createContent, recordDecision, recordReview, type ItemRow } from "@/server/repo";
+import { createContent, recordDecision, recordReview, seedConstructionItem, type ItemRow } from "@/server/repo";
+import { getUnit } from "@/server/syllabus/config";
 import {
   buildCloze,
   deriveItemSchedule,
@@ -303,5 +304,79 @@ describe("getQueueCards", () => {
     }
     const cards = getQueueCards(db, 2, new Date());
     expect(cards).toHaveLength(2);
+  });
+});
+
+describe("DueItem card context (why / taxonomy / syllabus origin)", () => {
+  it("carries the item's why and taxonomy, with a null syllabus origin for an ordinary capture", () => {
+    const item = seedItem(db, { id: "cand_detail", why: "formal opinion opener", taxonomy: ["register"] });
+
+    const due = getDueItems(db, 20, new Date()).find((d) => d.id === item.id);
+
+    expect(due).toBeDefined();
+    expect(due!.why).toBe("formal opinion opener");
+    expect(due!.taxonomy).toEqual(["register"]);
+    expect(due!.syllabus).toBeNull();
+  });
+
+  it("resolves a syllabus-seeded item's unit title, and its section title through the origin content row", () => {
+    const unit = getUnit("dyh7", "u1")!;
+    const section = unit.sections[1];
+    const sectionContent = createContent(db, {
+      source: "upload",
+      type: "article",
+      title: `${unit.title} — ${section.title}`,
+      text: "Considero que es más provechoso viajar solo que en grupo, aunque depende mucho del destino y del presupuesto.",
+      didactic: true,
+      syllabusRef: `dyh7/u1/${section.id}`,
+    });
+    const { itemId: foundId } = seedConstructionItem(db, {
+      chunk: "Considero que",
+      originContentId: sectionContent.id,
+      originSentence: "Considero que es más provechoso viajar solo que en grupo.",
+      why: "formal opinion opener",
+      tag: "register",
+      syllabusRef: "dyh7/u1",
+      contrastSet: ["Considero que", "me parece que"],
+    });
+    const { itemId: unfoundId } = seedConstructionItem(db, {
+      chunk: "le sugiero que",
+      originContentId: null,
+      originSentence: "le sugiero que",
+      why: "volition verb + subjunctive",
+      tag: "grammar",
+      syllabusRef: "dyh7/u1",
+      contrastSet: null,
+    });
+
+    const due = getDueItems(db, 20, new Date());
+
+    expect(due.find((d) => d.id === foundId)?.syllabus).toEqual({
+      level: "dyh7",
+      unit: "u1",
+      unitTitle: unit.title,
+      sectionTitle: section.title,
+    });
+    expect(due.find((d) => d.id === unfoundId)?.syllabus).toEqual({
+      level: "dyh7",
+      unit: "u1",
+      unitTitle: unit.title,
+      sectionTitle: null,
+    });
+    expect(due.find((d) => d.id === foundId)?.contrastSet).toEqual(["Considero que", "me parece que"]);
+  });
+
+  it("leaves the syllabus origin null when the ref points at no configured unit", () => {
+    const { itemId } = seedConstructionItem(db, {
+      chunk: "frase huérfana",
+      originContentId: null,
+      originSentence: "frase huérfana",
+      why: "orphaned ref",
+      tag: "grammar",
+      syllabusRef: "nolevel/u9",
+      contrastSet: null,
+    });
+
+    expect(getDueItems(db, 20, new Date()).find((d) => d.id === itemId)?.syllabus).toBeNull();
   });
 });
