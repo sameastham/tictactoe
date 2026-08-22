@@ -245,6 +245,7 @@ export type EventPayload =
   | AdjudicatedPayload
   | ReviewedPayload
   | DictationMissPayload
+  | SyllabusAdvancedPayload
   | Record<string, unknown>;
 
 /** A model extraction result as persisted on a content row, with provenance. */
@@ -483,3 +484,116 @@ export const TalkReportSchema = z.object({
   fluency: FluencyAggregateSchema.nullable(),
 });
 export type TalkReport = z.infer<typeof TalkReportSchema>;
+
+// -----------------------------------------------------------------------------
+// Syllabus (Dicho y hecho curriculum) — see src/server/syllabus/config.ts
+// -----------------------------------------------------------------------------
+
+/** One section within a syllabus unit: its title and a tight paraphrase of the book's stated objectives. */
+export const SyllabusSectionSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  objectives: z.array(z.string()),
+});
+export type SyllabusSection = z.infer<typeof SyllabusSectionSchema>;
+
+/** A Fix-ready writing prompt derived from a unit's task-based goal, targeting one or more of the unit's constructions. */
+export const SyllabusTareaSchema = z.object({
+  id: z.string(),
+  /** Spanish, actionable writing task — passed straight to the Fix surface as `task`. */
+  prompt: z.string(),
+  targetConstructionIds: z.array(z.string()),
+});
+export type SyllabusTarea = z.infer<typeof SyllabusTareaSchema>;
+
+/** One grammatical construction/chunk the book explicitly teaches in a unit, mined from its grammar boxes and/or the grammar annex. */
+export const SyllabusConstructionSchema = z.object({
+  id: z.string(),
+  /** The construction as a capturable chunk, e.g. "por más que". */
+  chunk: z.string(),
+  description: z.string(),
+  tag: z.enum(TAXONOMY),
+});
+export type SyllabusConstruction = z.infer<typeof SyllabusConstructionSchema>;
+
+/** One unit of a syllabus level: its sections, target constructions, and Fix tareas. */
+export const SyllabusUnitSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  theme: z.string(),
+  sections: z.array(SyllabusSectionSchema),
+  constructions: z.array(SyllabusConstructionSchema),
+  tareas: z.array(SyllabusTareaSchema),
+});
+export type SyllabusUnit = z.infer<typeof SyllabusUnitSchema>;
+
+/** A full curriculum level (e.g. "dyh7") — one `config/syllabus/*.json` file validates against this. */
+export const SyllabusLevelSchema = z.object({
+  id: z.string(),
+  series: z.literal("dicho-y-hecho"),
+  name: z.string(),
+  cefr: z.string(),
+  units: z.array(SyllabusUnitSchema).min(1),
+});
+export type SyllabusLevel = z.infer<typeof SyllabusLevelSchema>;
+
+/** Payload of a `syllabus_advanced` event: the learner explicitly moved on to a new syllabus level/unit. */
+export const SyllabusAdvancedPayloadSchema = z.object({
+  level: z.string(),
+  unit: z.string(),
+});
+export type SyllabusAdvancedPayload = z.infer<typeof SyllabusAdvancedPayloadSchema>;
+
+/** Body of "advance to a new syllabus unit" (POST /api/syllabus/advance) API request. */
+export const AdvanceSyllabusBodySchema = z.object({
+  level: z.string(),
+  unit: z.string(),
+});
+export type AdvanceSyllabusBody = z.infer<typeof AdvanceSyllabusBodySchema>;
+
+// -----------------------------------------------------------------------------
+// Book ingestion report — src/server/syllabus/ingest.ts's `ingestBook`, shared
+// by scripts/ingest-book.ts (CLI) and POST /api/syllabus/ingest (Plan page's
+// UI-driven ingest form). Both render the SAME report shape; only the
+// presentation differs (a printed table vs. JSON).
+// -----------------------------------------------------------------------------
+
+/** One section's ingestion outcome within one syllabus unit. */
+export const SectionIngestResultSchema = z.object({
+  unitId: z.string(),
+  sectionId: z.string(),
+  syllabusRef: z.string(),
+  title: z.string(),
+  contentId: z.string(),
+  textLength: z.number().int().nonnegative(),
+  alreadyExisted: z.boolean(),
+});
+export type SectionIngestResult = z.infer<typeof SectionIngestResultSchema>;
+
+/** One construction's ingestion outcome. */
+export const ConstructionIngestResultSchema = z.object({
+  constructionId: z.string(),
+  chunk: z.string(),
+  status: z.enum(["found", "unfound", "already_seeded"]),
+  /** The section id the chunk's first occurrence was found in — only set when `status === "found"`. */
+  foundInSectionId: z.string().optional(),
+});
+export type ConstructionIngestResult = z.infer<typeof ConstructionIngestResultSchema>;
+
+/** One unit's full ingestion outcome — the shape both the CLI and the ingest API render as the per-unit report. */
+export const UnitIngestResultSchema = z.object({
+  unitId: z.string(),
+  title: z.string(),
+  sections: z.array(SectionIngestResultSchema),
+  constructions: z.array(ConstructionIngestResultSchema),
+});
+export type UnitIngestResult = z.infer<typeof UnitIngestResultSchema>;
+
+/** Full ingestion run outcome — returned by `ingestBook` and served as `POST /api/syllabus/ingest`'s `{ report }` body. */
+export const IngestReportSchema = z.object({
+  levelId: z.string(),
+  units: z.array(UnitIngestResultSchema),
+  /** Config sections for which NO page of any given PDF was found (heading never matched) — a real mismatch worth investigating, not just an empty section. */
+  missingSections: z.array(z.string()),
+});
+export type IngestReport = z.infer<typeof IngestReportSchema>;

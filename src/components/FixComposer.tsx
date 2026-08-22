@@ -27,6 +27,38 @@ interface RetoItem {
   due: boolean;
 }
 
+/** Minimal shape read from `GET /api/syllabus`'s `evidence` — just enough to pull construction item ids. */
+interface SyllabusEvidenceDto {
+  constructions: { itemId: string | null }[];
+}
+
+interface ByIdsItem {
+  id: string;
+  chunk: string;
+  register: Register;
+}
+
+/** One tarea's target item, resolved server-side (see `/fix/write`'s `resolveTarea`). */
+export interface TareaTargetItem {
+  id: string;
+  chunk: string;
+  register: Register;
+}
+
+/**
+ * Preset passed by `/fix/write?tarea=<level>/<unit>/<tareaId>`: locks the
+ * composer into Reto mode against one syllabus tarea instead of the usual
+ * due/recent item pool. `task` is the exact string to submit (already
+ * carrying the `syllabus:<level>/<unit>/<tareaId>:` prefix
+ * `tareaTaskPrefix` — src/server/syllabus/progress.ts — expects for tarea
+ * evidence); `promptDisplay` is the clean prompt text shown in the panel.
+ */
+export interface TareaPreset {
+  task: string;
+  promptDisplay: string;
+  items: TareaTargetItem[];
+}
+
 const PRESELECT_COUNT = 3;
 const RETO_CHIP_COUNT = 6;
 const TOP_UP_THRESHOLD = 3;
@@ -56,21 +88,37 @@ async function readErrorMessage(res: Response): Promise<string> {
   return "Algo salió mal. Intenta de nuevo.";
 }
 
-export function FixComposer() {
+/** A tarea preset's target items, shaped as Reto chips (never "due" — the tarea assigns them, not the scheduler). */
+function itemsFromTarea(tarea: TareaPreset): RetoItem[] {
+  return tarea.items.map((item) => ({ ...item, due: false }));
+}
+
+export function FixComposer({ tarea }: { tarea?: TareaPreset } = {}) {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("libre");
+  const [mode, setMode] = useState<Mode>(tarea ? "reto" : "libre");
   const [text, setText] = useState("");
-  const [items, setItems] = useState<RetoItem[] | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // A tarea preset's items are known synchronously from props — set as the
+  // initial state directly (no effect needed for that case, and no effect
+  // may synchronously setState from data already available at render time).
+  const [items, setItems] = useState<RetoItem[] | null>(() => (tarea ? itemsFromTarea(tarea) : null));
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set(tarea ? tarea.items.map((item) => item.id) : []),
+  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const preselectedRef = useRef(false);
+  const preselectedRef = useRef(tarea !== undefined);
 
-  // Reto's target-item chips: due items first (the scheduler's Fix-prompt
-  // delivery preference), topped up with the most recent captures when the
-  // learner doesn't have >= 3 due yet, so the panel never looks sparse for a
-  // fresh learner. Due items are marked so their chip can show a due badge.
+  // Reto's target-item chips. With a tarea preset, the panel is scoped to
+  // exactly that tarea's target construction items (all preselected, set as
+  // initial state above) — no due/recent/syllabus fetch at all. Otherwise:
+  // due items first (the scheduler's Fix-prompt delivery preference), then
+  // the active syllabus unit's construction items (if any), topped up with
+  // the most recent captures when the learner still doesn't have >= 3
+  // chips, so the panel never looks sparse for a fresh learner. Due items
+  // are marked so their chip can show a due badge.
   useEffect(() => {
+    if (tarea) return;
+
     async function load() {
       let due: RetoItem[] = [];
       try {
@@ -80,10 +128,38 @@ export function FixComposer() {
           due = data.items.map((item) => ({ id: item.id, chunk: item.chunk, register: item.register, due: true }));
         }
       } catch {
-        // fall through to recent-only below
+        // fall through to the rest of the pool below
       }
 
       let merged = due;
+
+      // Active syllabus unit's construction items join the pool next (still
+      // ahead of the recent-items top-up) — see /fix/write §3 of the Plan
+      // design.
+      try {
+        const res = await fetch("/api/syllabus");
+        if (res.ok) {
+          const data = (await res.json()) as { evidence: SyllabusEvidenceDto | null };
+          const seen = new Set(merged.map((item) => item.id));
+          const newIds = (data.evidence?.constructions ?? [])
+            .map((c) => c.itemId)
+            .filter((id): id is string => id !== null && !seen.has(id));
+          if (newIds.length > 0) {
+            const idsRes = await fetch(`/api/items/by-ids?ids=${newIds.join(",")}`);
+            if (idsRes.ok) {
+              const idsData = (await idsRes.json()) as { items: ByIdsItem[] };
+              for (const item of idsData.items) {
+                if (seen.has(item.id) || merged.length >= RETO_CHIP_COUNT) continue;
+                seen.add(item.id);
+                merged = [...merged, { id: item.id, chunk: item.chunk, register: item.register, due: false }];
+              }
+            }
+          }
+        }
+      } catch {
+        // syllabus items are a nice-to-have, not required
+      }
+
       if (merged.length < TOP_UP_THRESHOLD) {
         try {
           const res = await fetch(`/api/items/recent?limit=${RETO_CHIP_COUNT}`);
@@ -97,7 +173,7 @@ export function FixComposer() {
             }
           }
         } catch {
-          // keep whatever due items we already have
+          // keep whatever items we already have
         }
       }
 
@@ -108,7 +184,7 @@ export function FixComposer() {
       }
     }
     load().catch(() => setItems([]));
-  }, []);
+  }, [tarea]);
 
   function toggleChip(id: string) {
     setSelectedIds((prev) => {
@@ -120,7 +196,9 @@ export function FixComposer() {
   }
 
   const selectedChunks = (items ?? []).filter((item) => selectedIds.has(item.id)).map((item) => item.chunk);
-  const taskPreview = buildTask(selectedChunks);
+  // A tarea's task is a fixed, assigned prompt — it doesn't get rebuilt from
+  // whichever chips happen to be selected the way the generic Reto task does.
+  const taskPreview = tarea ? tarea.promptDisplay : buildTask(selectedChunks);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -139,7 +217,10 @@ export function FixComposer() {
 
     const body: { text: string; task?: string; targetItemIds?: string[] } = { text: trimmed };
     if (mode === "reto") {
-      body.task = taskPreview;
+      // The submitted task string carries the "syllabus:<ref>:" prefix in
+      // tarea mode (see TareaPreset's doc comment) — taskPreview only ever
+      // shows the clean, prefix-free prompt.
+      body.task = tarea ? tarea.task : taskPreview;
       body.targetItemIds = Array.from(selectedIds);
     }
 

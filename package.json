@@ -10,6 +10,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "seed": "tsx scripts/seed.ts",
+    "ingest-book": "tsx scripts/ingest-book.ts",
     "goldset": "tsx scripts/goldset.ts",
     "eval": "tsx scripts/eval.ts",
     "test": "vitest run",

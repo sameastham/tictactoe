@@ -1,0 +1,480 @@
+{
+  "id": "dyh7",
+  "series": "dicho-y-hecho",
+  "name": "Dicho y hecho 7",
+  "cefr": "B2+",
+  "units": [
+    {
+      "id": "u1",
+      "title": "Turismo y arqueología maya",
+      "theme": "Viajes, sitios arqueológicos mayas y la descripción de lugares turísticos en México.",
+      "sections": [
+        {
+          "id": "s1",
+          "title": "Mi México lindo y querido",
+          "objectives": [
+            "Vocabulario de lugares turísticos mexicanos.",
+            "Expresiones coloquiales mexicanas frecuentes.",
+            "La estructura y finalidad de un texto narrativo/descriptivo.",
+            "Ordenadores discursivos temporales para narrar experiencias."
+          ]
+        },
+        {
+          "id": "s2",
+          "title": "Recomendaciones de viaje",
+          "objectives": [
+            "Construcciones de opinión con los verbos parecer y considerar.",
+            "Subordinadas que dependen de verbos de opinión y de voluntad.",
+            "Dos usos distintos del verbo decir (opinión vs. voluntad)."
+          ]
+        },
+        {
+          "id": "s3",
+          "title": "La pirámide de Kukulcán",
+          "objectives": [
+            "Oraciones de relativo explicativo.",
+            "Diferencia entre que y el/la/los/las cual(es) en oraciones relativas.",
+            "Descripción formal de un lugar arqueológico famoso.",
+            "Redacción sobre un lugar histórico del propio país."
+          ]
+        },
+        {
+          "id": "s4",
+          "title": "Viaje por la península de Yucatán",
+          "objectives": [
+            "Vocabulario relativo al buceo y a lo acuático.",
+            "Un elemento geográfico característico de la península de Yucatán.",
+            "Actividades turísticas de la zona.",
+            "Expresar opinión y hacer sugerencias de manera cortés.",
+            "Literatura y humor yucatecos."
+          ]
+        }
+      ],
+      "constructions": [
+        {
+          "id": "c1",
+          "chunk": "me parece que",
+          "description": "Verbo parecer con pronombre para dar una opinión personalizada; indicativo si la principal es afirmativa, subjuntivo si es negativa.",
+          "tag": "grammar"
+        },
+        {
+          "id": "c2",
+          "chunk": "considero que",
+          "description": "Forma más formal de dar una opinión (equivalente a creo que/pienso que); nunca lleva pronombre de objeto indirecto.",
+          "tag": "register"
+        },
+        {
+          "id": "c3",
+          "chunk": "el cual",
+          "description": "Relativo compuesto (el/la/los/las cual(es)) propio de textos formales; identifica el referente en género y número con más precisión que que.",
+          "tag": "register"
+        },
+        {
+          "id": "c4",
+          "chunk": "para cerrar con broche de oro",
+          "description": "Expresión idiomática coloquial mexicana para introducir el cierre memorable de una narración.",
+          "tag": "idiomaticity"
+        },
+        {
+          "id": "c5",
+          "chunk": "le sugiero que",
+          "description": "Verbo de voluntad + subjuntivo en la subordinada, porque el sujeto de la acción sugerida es distinto del que sugiere.",
+          "tag": "grammar"
+        }
+      ],
+      "tareas": [
+        {
+          "id": "t1",
+          "prompt": "Escribe una descripción de 150-200 palabras de un lugar turístico o arqueológico que conozcas. Usa al menos dos oraciones de relativo con el cual/la cual/los cuales/las cuales para precisar tus referencias.",
+          "targetConstructionIds": ["c3"]
+        },
+        {
+          "id": "t2",
+          "prompt": "Escribe 6-8 frases dando tu opinión y haciendo recomendaciones de viaje a un amigo que va a visitar tu país. Usa: me parece que, considero que, le sugiero que.",
+          "targetConstructionIds": ["c1", "c2", "c5"]
+        }
+      ]
+    },
+    {
+      "id": "u2",
+      "title": "La ciudad: su arquitectura y su atmósfera",
+      "theme": "Descripción de ciudades mexicanas, su arquitectura y las percepciones de quienes las visitan o las habitan.",
+      "sections": [
+        {
+          "id": "s1",
+          "title": "Un vistazo a la ciudad de Guadalajara",
+          "objectives": [
+            "Vocabulario de elementos arquitectónicos.",
+            "Expresiones coloquiales frecuentes.",
+            "Los relativos el/la/los/las que y lo que para identificar o intensificar información."
+          ]
+        },
+        {
+          "id": "s2",
+          "title": "Arquitectura moderna en México",
+          "objectives": [
+            "El arquitecto mexicano Luis Barragán.",
+            "Estilo directo e indirecto en pasado (transformación de tiempos verbales)."
+          ]
+        },
+        {
+          "id": "s3",
+          "title": "Arquitectura y filosofía minimalista",
+          "objectives": [
+            "Rasgos de la arquitectura minimalista.",
+            "Nexos consecutivos.",
+            "Estrategias para inferir vocabulario por el contexto.",
+            "Construcción de textos combinando relativos y conectores."
+          ]
+        },
+        {
+          "id": "s4",
+          "title": "Las ciudades y sus habitantes",
+          "objectives": [
+            "Carta informal que narra las percepciones de dos viajeros en una ciudad.",
+            "Uso especial del verbo parecer y de otros verbos de percepción.",
+            "Entrevista sobre percepciones extranjeras de la Ciudad de México."
+          ]
+        }
+      ],
+      "constructions": [
+        {
+          "id": "c1",
+          "chunk": "lo que más me gusta",
+          "description": "Construcción hendida con lo que para enfatizar un elemento no nombrado directamente; indicativo si el antecedente es conocido, subjuntivo si no.",
+          "tag": "word_order"
+        },
+        {
+          "id": "c2",
+          "chunk": "la que más",
+          "description": "Relativo con artículo (el/la/los/las que) + ser, usado para seleccionar o enfatizar un elemento dentro de un conjunto conocido.",
+          "tag": "word_order"
+        },
+        {
+          "id": "c3",
+          "chunk": "dijo que",
+          "description": "Marcador de estilo indirecto; dispara el cambio de tiempos verbales (presente->copretérito, futuro->pospretérito, etc.) al reportar lo dicho.",
+          "tag": "grammar"
+        },
+        {
+          "id": "c4",
+          "chunk": "así que",
+          "description": "Nexo consecutivo que introduce una oración independiente como consecuencia de lo dicho antes; no rige subjuntivo.",
+          "tag": "discourse"
+        }
+      ],
+      "tareas": [
+        {
+          "id": "t1",
+          "prompt": "Redacta un párrafo de 100-150 palabras describiendo tu ciudad. Usa construcciones enfáticas con lo que / el que / la que / los que / las que para resaltar lo que más te gusta o te disgusta de ella.",
+          "targetConstructionIds": ["c1", "c2"]
+        },
+        {
+          "id": "t2",
+          "prompt": "Cuenta en estilo indirecto algo que un amigo o familiar te contó sobre una ciudad que visitó, encadenando dos ideas con un nexo consecutivo como así que.",
+          "targetConstructionIds": ["c3", "c4"]
+        }
+      ]
+    },
+    {
+      "id": "u3",
+      "title": "Agricultura y alimentación",
+      "theme": "La industrialización de los alimentos, la historia del maíz y el debate sobre los transgénicos.",
+      "sections": [
+        {
+          "id": "s1",
+          "title": "La industrialización de los alimentos",
+          "objectives": [
+            "Hábitos alimenticios propios y ajenos.",
+            "Un texto de Octavio Paz sobre la industrialización de los alimentos.",
+            "Vocabulario relativo a la alimentación.",
+            "El nexo copulativo enfático no sólo... sino."
+          ]
+        },
+        {
+          "id": "s2",
+          "title": "Historia y producción del maíz",
+          "objectives": [
+            "Alimentos base en distintas partes del mundo.",
+            "Síntesis de las ideas principales de un texto.",
+            "El nexo enfático incluso/inclusive.",
+            "Las frases prepositivas a pesar de y pese a.",
+            "Construcción de un texto uniendo frases sueltas en párrafos."
+          ]
+        },
+        {
+          "id": "s3",
+          "title": "El cultivo de transgénicos",
+          "objectives": [
+            "Opiniones de científicos mexicanos sobre el maíz transgénico.",
+            "Expresar una opinión propia y argumentarla.",
+            "Oraciones subordinadas complementarias de sustantivo o de adjetivo."
+          ]
+        }
+      ],
+      "constructions": [
+        {
+          "id": "c1",
+          "chunk": "a pesar de que",
+          "description": "Nexo concesivo equivalente a aunque; a diferencia de aunque, también puede introducir un sustantivo o un infinitivo (a pesar de + sustantivo/infinitivo).",
+          "tag": "discourse"
+        },
+        {
+          "id": "c2",
+          "chunk": "pese a que",
+          "description": "Sinónimo formal de a pesar de que; presenta una objeción sin negar el hecho principal.",
+          "tag": "discourse"
+        },
+        {
+          "id": "c3",
+          "chunk": "el hecho de que",
+          "description": "Sustantivo + de que + subordinada; el modo depende de si el hablante presenta la información como nueva/relevante (indicativo) o como conocida/secundaria (subjuntivo).",
+          "tag": "grammar"
+        },
+        {
+          "id": "c4",
+          "chunk": "incluso",
+          "description": "Nexo que agrega enfáticamente una información que el hablante considera que va más allá de lo esperado por el oyente (equivalente a inclusive).",
+          "tag": "discourse"
+        }
+      ],
+      "tareas": [
+        {
+          "id": "t1",
+          "prompt": "Escribe una narración de 150-200 palabras sobre la historia de un alimento típico de tu región. Usa a pesar de que o pese a que al menos una vez para señalar un obstáculo que ese alimento superó.",
+          "targetConstructionIds": ["c1", "c2"]
+        },
+        {
+          "id": "t2",
+          "prompt": "Escribe 5-6 frases argumentando tu postura sobre los alimentos transgénicos. Usa: el hecho de que, incluso.",
+          "targetConstructionIds": ["c3", "c4"]
+        }
+      ]
+    },
+    {
+      "id": "u4",
+      "title": "Pueblos indígenas en Latinoamérica",
+      "theme": "La identidad, distribución y formas de vida de los pueblos indígenas de América Latina.",
+      "sections": [
+        {
+          "id": "s1",
+          "title": "Latinoamérica indígena",
+          "objectives": [
+            "Presencia de grupos indígenas en América Latina.",
+            "Vocabulario de geografía latinoamericana.",
+            "Formas para negar una relación causal.",
+            "Distinguir ideas secundarias en un texto."
+          ]
+        },
+        {
+          "id": "s2",
+          "title": "Formas de vida de los indígenas",
+          "objectives": [
+            "Dos pueblos indígenas de México y Centroamérica.",
+            "Elementos que componen una descripción.",
+            "Dos formas nuevas para expresar condición.",
+            "Describir grupos humanos."
+          ]
+        },
+        {
+          "id": "s3",
+          "title": "Los mapuches",
+          "objectives": [
+            "Un grupo indígena de Sudamérica.",
+            "El discurso indirecto para reportar preguntas.",
+            "Conjeturas y suposiciones sobre el pasado."
+          ]
+        }
+      ],
+      "constructions": [
+        {
+          "id": "c1",
+          "chunk": "no porque",
+          "description": "Inicia la fórmula no porque + subjuntivo... sino porque + indicativo, que niega una causa aparente y afirma la causa real.",
+          "tag": "grammar"
+        },
+        {
+          "id": "c2",
+          "chunk": "de no ser por",
+          "description": "Locución sustitutiva de si no fuera por; expresa una condición irreal sin usar si (de + infinitivo).",
+          "tag": "idiomaticity"
+        },
+        {
+          "id": "c3",
+          "chunk": "debe de",
+          "description": "Modal de suposición (debe de + infinitivo en presente, debe de haber + participio en pasado) con matiz de mayor seguridad que ha de.",
+          "tag": "grammar"
+        },
+        {
+          "id": "c4",
+          "chunk": "no dijo que",
+          "description": "El verbo decir negado cambia de sentido según el modo de la subordinada: con copretérito da por cierto el hecho no mencionado; con subjuntivo lo deja incierto.",
+          "tag": "grammar"
+        }
+      ],
+      "tareas": [
+        {
+          "id": "t1",
+          "prompt": "Escribe 5-6 frases negando una causa aparente y señalando la razón verdadera de una costumbre o tradición que conozcas. Usa: no porque... sino porque.",
+          "targetConstructionIds": ["c1"]
+        },
+        {
+          "id": "t2",
+          "prompt": "Escribe un párrafo breve haciendo suposiciones sobre por qué una comunidad o persona actúa de cierta manera. Usa: debe de, de no ser por.",
+          "targetConstructionIds": ["c2", "c3"]
+        }
+      ]
+    },
+    {
+      "id": "u5",
+      "title": "Vivir en una ciudad",
+      "theme": "Problemáticas urbanas, argumentación y concesión a partir de la Ciudad de México, Bogotá y Caracas.",
+      "sections": [
+        {
+          "id": "s1",
+          "title": "La Ciudad de México",
+          "objectives": [
+            "Oraciones subordinadas concesivas.",
+            "La estructura de un texto argumentativo.",
+            "Expresar un punto de vista con argumentos."
+          ]
+        },
+        {
+          "id": "s2",
+          "title": "La ciudad de Bogotá",
+          "objectives": [
+            "Opciones de transporte para una gran ciudad.",
+            "Medidas adoptadas en Bogotá para la movilidad.",
+            "Locuciones sustitutivas de aunque."
+          ]
+        },
+        {
+          "id": "s3",
+          "title": "La ciudad de Caracas",
+          "objectives": [
+            "Estilos de vida asociados a las características de un barrio.",
+            "Condiciones negativas con locuciones sustitutivas de si no.",
+            "Vocabulario de problemas citadinos.",
+            "Inquietudes de niños caraqueños sobre su ciudad.",
+            "Inferir el significado de palabras nuevas por el contexto."
+          ]
+        }
+      ],
+      "constructions": [
+        {
+          "id": "c1",
+          "chunk": "por más que",
+          "description": "Locución sustitutiva de aunque para expresar concesión enfática, seguida de subjuntivo cuando la acción es hipotética.",
+          "tag": "discourse"
+        },
+        {
+          "id": "c2",
+          "chunk": "a menos que",
+          "description": "Locución sustitutiva de si no, seguida de subjuntivo, para expresar una condición negativa.",
+          "tag": "grammar"
+        },
+        {
+          "id": "c3",
+          "chunk": "y eso que",
+          "description": "Nexo concesivo coloquial que introduce un dato que hace más sorprendente lo dicho antes.",
+          "tag": "register"
+        },
+        {
+          "id": "c4",
+          "chunk": "aun a sabiendas de que",
+          "description": "Locución concesiva de registro más formal/literario: se hace algo aunque se conocen de antemano sus consecuencias.",
+          "tag": "register"
+        },
+        {
+          "id": "c5",
+          "chunk": "salvo que",
+          "description": "Locución sustitutiva de si no, alterna con a menos que/a no ser que/excepto que para introducir una condición negativa.",
+          "tag": "grammar"
+        }
+      ],
+      "tareas": [
+        {
+          "id": "t1",
+          "prompt": "Redacta una carta formal de 150-200 palabras a una autoridad de tu ciudad argumentando a favor de una mejora urbana. Usa por más que o aun a sabiendas de que para conceder un punto en contra antes de rebatirlo.",
+          "targetConstructionIds": ["c1", "c4"]
+        },
+        {
+          "id": "t2",
+          "prompt": "Escribe 5-6 frases sobre las condiciones bajo las cuales cambiarías de opinión en un debate sobre tu ciudad. Usa: a menos que, salvo que.",
+          "targetConstructionIds": ["c2", "c5"]
+        }
+      ]
+    },
+    {
+      "id": "u6",
+      "title": "Cruzando la frontera",
+      "theme": "La migración internacional, sus causas y el proceso de integración en el país de destino.",
+      "sections": [
+        {
+          "id": "s1",
+          "title": "La migración: ¿de dónde y hacia dónde?",
+          "objectives": [
+            "Opinar sobre la migración internacional.",
+            "Vocabulario relativo a la migración.",
+            "Uso correcto e incorrecto del gerundio.",
+            "Expresiones idiomáticas relativas a la migración."
+          ]
+        },
+        {
+          "id": "s2",
+          "title": "El proceso de integración",
+          "objectives": [
+            "Experiencias personales relacionadas con la migración.",
+            "Opinar sobre la integración de los inmigrantes.",
+            "Perífrasis verbales de gerundio y de participio.",
+            "Redactar una opinión sobre un texto de migración."
+          ]
+        }
+      ],
+      "constructions": [
+        {
+          "id": "c1",
+          "chunk": "anda pensando",
+          "description": "Perífrasis andar + gerundio: expresa una acción frecuentativa o dinámica, a veces con matiz de incertidumbre o preocupación.",
+          "tag": "grammar"
+        },
+        {
+          "id": "c2",
+          "chunk": "va aumentando",
+          "description": "Perífrasis ir + gerundio: expresa una acción que se desarrolla de manera gradual, sin que ir conserve su significado de movimiento.",
+          "tag": "grammar"
+        },
+        {
+          "id": "c3",
+          "chunk": "quedó dicho",
+          "description": "Perífrasis quedar + participio: expresa una acción terminada cuyo resultado se considera en el momento en que se habla.",
+          "tag": "grammar"
+        },
+        {
+          "id": "c4",
+          "chunk": "tengo dicho",
+          "description": "Perífrasis tener + participio: resultado de una acción ejercida repetidamente sobre un objeto explícito; el participio concuerda con él.",
+          "tag": "grammar"
+        },
+        {
+          "id": "c5",
+          "chunk": "llevo enviados",
+          "description": "Perífrasis llevar + participio: expresa el resultado acumulado de una acción que aún puede continuar; el participio concuerda en género y número con el objeto.",
+          "tag": "grammar"
+        }
+      ],
+      "tareas": [
+        {
+          "id": "t1",
+          "prompt": "Escribe 6-8 frases con una propuesta política a favor de los inmigrantes en tu país. Usa al menos dos perífrasis de gerundio (anda + gerundio, va/van + gerundio) para describir procesos en desarrollo.",
+          "targetConstructionIds": ["c1", "c2"]
+        },
+        {
+          "id": "t2",
+          "prompt": "Escribe un párrafo breve resumiendo los compromisos que tu partido ya ha cumplido. Usa perífrasis de participio: quedó, tengo, llevo + participio.",
+          "targetConstructionIds": ["c3", "c4", "c5"]
+        }
+      ]
+    }
+  ]
+}

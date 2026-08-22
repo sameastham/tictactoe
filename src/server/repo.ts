@@ -20,7 +20,7 @@ import type {
   StoredExtraction,
   WordTimestamp,
 } from "@/lib/contracts";
-import type { Rung, Surface } from "@/lib/taxonomy";
+import type { Rung, Surface, TaxonomyTag } from "@/lib/taxonomy";
 
 /** Thrown by {@link recordDecision} when a candidate already has a keep/discard decision. */
 export class AlreadyDecidedError extends Error {
@@ -65,6 +65,10 @@ export type CreateContentInput = {
   text: string;
   /** Repo-relative path under data/media/ (Listen surface uploads). */
   mediaPath?: string | null;
+  /** True for syllabus-ingested textbook content (see `src/server/syllabus/ingest.ts`). Defaults to false. */
+  didactic?: boolean;
+  /** Set on didactic content: "{levelId}/{unitId}/{sectionId}", e.g. "dyh7/u4/s2". Defaults to null. */
+  syllabusRef?: string | null;
 };
 
 /** Inserts a new piece of content and returns the persisted row. */
@@ -78,10 +82,17 @@ export function createContent(db: Db, data: CreateContentInput): ContentRow {
     title: data.title ?? null,
     text: data.text,
     mediaPath: data.mediaPath ?? null,
+    didactic: data.didactic ?? false,
+    syllabusRef: data.syllabusRef ?? null,
     createdAt: new Date(),
   };
   db.insert(content).values(row).run();
   return getContent(db, row.id)!;
+}
+
+/** Fetches a single content row by its `syllabusRef` (idempotency check for ingestion), or undefined if none exists. */
+export function getContentBySyllabusRef(db: Db, syllabusRef: string): ContentRow | undefined {
+  return db.select().from(content).where(eq(content.syllabusRef, syllabusRef)).get();
 }
 
 /**
@@ -729,6 +740,86 @@ export function captureFromMiss(db: Db, input: CaptureFromMissInput): { itemId: 
 
     return { itemId };
   });
+}
+
+// -----------------------------------------------------------------------------
+// syllabus (curriculum construction seeding — see src/server/syllabus/ingest.ts)
+// -----------------------------------------------------------------------------
+
+export type SeedConstructionItemInput = {
+  chunk: string;
+  /** The section content row this construction's chunk was found in, or null when not found anywhere in the ingested book text. */
+  originContentId: string | null;
+  /** Verbatim sentence containing `chunk` (from the section's ingested text), or `chunk` itself when not found. */
+  originSentence: string;
+  why: string;
+  tag: TaxonomyTag;
+  /** "{levelId}/{unitId}", e.g. "dyh7/u4". */
+  syllabusRef: string;
+};
+
+/**
+ * Records a curriculum construction being seeded as a practice item, in a
+ * single transaction: an items row (register "neutral", `syllabusRef` set)
+ * plus a `captured` event (surface "read", `promptVersion: "syllabus"`) —
+ * same shape as `recordDecision`'s "keep" branch and `captureFromMiss`, but
+ * for constructions mined from the syllabus config rather than a model
+ * extraction or a dictation miss. There is no model-extracted `Candidate`
+ * here either, so one is synthesized, matching `captureFromMiss`'s posture.
+ */
+export function seedConstructionItem(db: Db, input: SeedConstructionItemInput): { itemId: string } {
+  const { chunk, originContentId, originSentence, why, tag, syllabusRef } = input;
+
+  return db.transaction((tx) => {
+    const now = new Date();
+    const itemId = newId();
+
+    tx.insert(items)
+      .values({
+        id: itemId,
+        userId: DEFAULT_USER_ID,
+        chunk,
+        register: "neutral",
+        contrastSet: null,
+        originContentId,
+        originSentence,
+        why,
+        taxonomy: [tag],
+        syllabusRef,
+        createdAt: now,
+      })
+      .run();
+
+    const candidate: Candidate = {
+      id: `syllabus-${itemId}`,
+      chunk,
+      origin_sentence: originSentence,
+      register: "neutral",
+      why,
+      contrast_set: null,
+      taxonomy: [tag],
+    };
+    const payload: CapturedPayload = { candidateId: candidate.id, candidate, promptVersion: "syllabus" };
+    tx.insert(events)
+      .values({
+        id: newId(),
+        userId: DEFAULT_USER_ID,
+        type: "captured",
+        surface: "read",
+        itemId,
+        contentId: originContentId,
+        payload,
+        createdAt: now,
+      })
+      .run();
+
+    return { itemId };
+  });
+}
+
+/** Every item row already carrying a given `syllabusRef` (idempotency check for ingestion). */
+export function getItemsBySyllabusRef(db: Db, syllabusRef: string): ItemRow[] {
+  return db.select().from(items).where(eq(items.syllabusRef, syllabusRef)).all();
 }
 
 // -----------------------------------------------------------------------------

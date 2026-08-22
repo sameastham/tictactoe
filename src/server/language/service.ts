@@ -92,6 +92,16 @@ function cleanExtractResult(result: ExtractResult, articleText: string): Extract
  * of any stored content's text. Single full-table scan — fine at this
  * single-user scale. Used to mark a judge-proposed `better_version` as
  * attested (drawn from real, previously-seen usage) vs. merely model-invented.
+ *
+ * Deliberately does NOT filter out `didactic: true` (syllabus-ingested)
+ * content — a phrase attested in a UNAM CEPE textbook is legitimate
+ * attestation of real Spanish usage, same as a phrase from a news article or
+ * the learner's own notes. Contrast `src/server/goldset/build.ts`'s
+ * `buildSentencePool`, which DOES exclude didactic content: didactic prose
+ * must not define the naturalness baseline the judge is evaluated against
+ * (textbook exercise sentences are pedagogically engineered, not a sample of
+ * how natives actually write), but it's perfectly fine as evidence that a
+ * given phrase is real, attested Spanish.
  */
 function isAttested(db: Db, phrase: string): boolean {
   const normalizedPhrase = normalizeWhitespace(phrase);

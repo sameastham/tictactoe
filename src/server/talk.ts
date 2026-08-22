@@ -28,6 +28,8 @@ import {
   type SessionRow,
 } from "@/server/repo";
 import { getDueItems } from "@/server/scheduler";
+import { getUnit } from "@/server/syllabus/config";
+import { getActiveUnit } from "@/server/syllabus/progress";
 
 /** Thrown when a session id doesn't exist, or exists but isn't a "talk" surface session. */
 export class TalkSessionNotFoundError extends Error {
@@ -103,15 +105,28 @@ function firstWords(text: string, n: number): string {
 }
 
 /**
- * Picks today's Talk topic: the most recently added content with non-empty
- * text (its title if it has one, else its first 8 words) plus up to
- * {@link DUE_ITEMS_FOR_TOPIC} due-item chunks woven in as a soft challenge —
- * so Talk connects back to what Read/Fix have already surfaced, per plan
- * §4.3 ("topics seeded from recent content and due items"). Falls back to a
- * generic opener when there's no content yet; due chunks (if any) are still
- * appended in that case.
+ * Picks today's Talk topic: when an active syllabus unit exists, its theme
+ * ("Platiquemos del tema de tu unidad: <theme>…" — so Talk ties back to the
+ * curriculum the learner is actually working through, plan design §4);
+ * otherwise the most recently added content with non-empty text (its title
+ * if it has one, else its first 8 words), per plan §4.3 ("topics seeded from
+ * recent content and due items"). Either way, up to {@link DUE_ITEMS_FOR_TOPIC}
+ * due-item chunks are woven in as a soft challenge. Falls back to a generic
+ * opener when there's no active unit and no content yet; due chunks (if any)
+ * are still appended in that case.
  */
 export function seedTopic(db: Db): { topic: string; dueItems: JudgeTargetItem[] } {
+  const dueItemRows = getDueItems(db, DUE_ITEMS_FOR_TOPIC);
+  const dueItems: JudgeTargetItem[] = dueItemRows.map((item) => ({ id: item.id, chunk: item.chunk }));
+  const dueSuffix =
+    dueItems.length > 0 ? ` A ver si sale natural usar: ${dueItems.map((item) => item.chunk).join(", ")}.` : "";
+
+  const active = getActiveUnit(db);
+  const activeUnit = active ? getUnit(active.level, active.unit) : undefined;
+  if (activeUnit) {
+    return { topic: `Platiquemos del tema de tu unidad: ${activeUnit.theme}…${dueSuffix}`, dueItems };
+  }
+
   const recentContent = db
     .select()
     .from(content)
@@ -120,11 +135,6 @@ export function seedTopic(db: Db): { topic: string; dueItems: JudgeTargetItem[] 
     .limit(20)
     .all();
   const latest = recentContent.find((row) => row.text.trim().length > 0);
-
-  const dueItemRows = getDueItems(db, DUE_ITEMS_FOR_TOPIC);
-  const dueItems: JudgeTargetItem[] = dueItemRows.map((item) => ({ id: item.id, chunk: item.chunk }));
-  const dueSuffix =
-    dueItems.length > 0 ? ` A ver si sale natural usar: ${dueItems.map((item) => item.chunk).join(", ")}.` : "";
 
   if (!latest) {
     return { topic: `${FALLBACK_TOPIC}${dueSuffix}`, dueItems };

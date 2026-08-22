@@ -44,6 +44,12 @@ export default defineConfig({
       DB_PATH: ".tmp/e2e.db",
       MODEL_PROVIDER: "fixture",
       STT_PROVIDER: "fixture",
+      // Merges e2e/fixtures/plan-level.json (a tiny fake syllabus level
+      // matching fixtures/libro-falso.pdf) into getSyllabusLevels() for this
+      // server process only — see src/server/syllabus/config.ts. Harmless
+      // for every spec but plan-flow.spec.ts: it only adds one extra level
+      // nothing else ever ingests against.
+      SYLLABUS_EXTRA_CONFIG_DIR: "e2e/fixtures",
     },
   },
 });
