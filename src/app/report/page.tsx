@@ -48,9 +48,14 @@ export default function ReportPage() {
             <h1 className="text-2xl font-bold tracking-tight">Reporte</h1>
             <p className="mt-0.5 text-sm text-ink-muted">Tu progreso de la semana</p>
           </div>
-          <Link href="/profile" data-testid="link-to-profile" className="shrink-0 pt-1 text-sm font-semibold text-accent">
-            Perfil →
-          </Link>
+          <div className="flex shrink-0 items-center gap-3 pt-1">
+            <Link href="/profile" data-testid="link-to-profile" className="text-sm font-semibold text-accent">
+              Perfil →
+            </Link>
+            <Link href="/plan" data-testid="link-to-plan" className="text-sm font-semibold text-accent">
+              Plan →
+            </Link>
+          </div>
         </div>
       </header>
 

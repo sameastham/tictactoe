@@ -2,7 +2,12 @@ import { test, expect, devices, type BrowserContext, type Page } from "@playwrig
 
 /**
  * End-to-end coverage of the Plan (syllabus) UI, INCLUDING the UI-driven book
- * ingestion form itself: ingest the tiny fake book (`fixtures/libro-falso.pdf`)
+ * ingestion form itself. Test 0 proves the fresh-install entry path first —
+ * home's always-rendered Plan card shows its "setup" teaser (no active unit
+ * yet) and leads to /plan's empty state, since this is the only surface that
+ * reaches the ingest form on mobile without typing the URL (see
+ * `src/app/page.tsx`'s `PlanCard`). Tests 1+ then ingest the tiny fake book
+ * (`fixtures/libro-falso.pdf`)
  * against a fake, non-production level config (`e2e/fixtures/plan-level.json`,
  * merged in as the "fakebook" level via `src/server/syllabus/config.ts`'s
  * `SYLLABUS_EXTRA_CONFIG_DIR`, which `playwright.config.ts`'s `webServer.env`
@@ -51,6 +56,20 @@ test.describe.serial("Plan flow", () => {
 
   test.afterAll(async () => {
     await context.close();
+  });
+
+  test("0. fresh install: home shows the Plan setup teaser (no active unit yet), and tapping it reaches /plan's empty state", async () => {
+    await page.goto("/");
+
+    const card = page.getByTestId("home-plan-card");
+    await expect(card).toBeVisible();
+    await expect(card).toHaveAttribute("data-plan-state", "setup");
+    await expect(card).toContainText("Plan de estudios");
+    await expect(card).toContainText("Configurar →");
+
+    await card.click();
+    await page.waitForURL("/plan");
+    await expect(page.getByTestId("plan-empty-state")).toBeVisible();
   });
 
   test("1. ingest the fake book via the Plan page's UI form, then /plan shows the active unit with its sections and construction chips", async () => {
