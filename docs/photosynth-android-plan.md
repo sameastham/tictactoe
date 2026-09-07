@@ -5,6 +5,11 @@ publisher Microsoft Corporation, `AppPlatformVersion="8.0"`, Silverlight runtime
 
 Goal as stated: **a modern Android application, minimal changes to the UI, functionality preserved.**
 
+**Decisions taken (2026-09-07):** stay local (no cloud backend, no remote library, no upload
+queue), no Facebook / Twitter and no SDK-based sharing (Android share sheet only), no "featured"
+hub, and the Android app lives in its own repository (`photosynth-android`, see Section 8). The
+plan below is scoped to those decisions.
+
 This document is the plan. Section 1 says what the package actually is (so the plan is grounded in
 the binary, not in memory of the product). Section 2 is the reality check that constrains
 "preserved functionality". Sections 3–7 are the target architecture, the screen-by-screen UI
@@ -35,14 +40,14 @@ the decisions that are yours to make.
 - **What no longer exists.** photosynth.net (shut down February 2017), the Bing Maps v1 SOAP
   imagery/gazetteer/mobile-search services, the "Best of Bing" feed, Live Connect OAuth
   (`login.live.com/oauth20_*.srf` with `MBI_SSL` scope), Facebook SDK 6 embedded-WebView login,
-  Twitter 1.1 OAuth 1.0a + `update_with_media`. Every cloud feature therefore needs a modern
-  substitute or an explicit "kept behind an interface, no live backend" decision (Section 2).
+  Twitter 1.1 OAuth 1.0a + `update_with_media`. Per the decisions above, none of these get a
+  replacement backend: the app is local-only and every outbound share goes through the system
+  share sheet (Section 2).
 - **Recommendation.** Kotlin + Jetpack Compose app that reproduces the Metro panorama-hub / pivot
   UI one-to-one (same screens, same copy, same dark chrome and accent colour, same navigation
   graph), a C++ NDK engine (OpenCV + libjpeg-turbo + OpenGL ES 3) replacing the three native
-  components behind the *same* interface shapes the WP8 code used, local-first Library, sharing
-  rebuilt on the Android share sheet + MediaStore, and cloud publishing kept behind a
-  `PanoramaPublisher` interface with a self-hostable photosynth-compatible stub. Roughly 4
+  components behind the *same* interface shapes the WP8 code used, a local-only Library, and
+  sharing rebuilt on the Android share sheet + MediaStore with no cloud layer at all. Four
   milestones, engine work dominating.
 
 ---
@@ -129,18 +134,18 @@ Navigation entry: `UserInterface/MainPage.xaml?appStart=0`. Lens entry: `MainLen
 | Capture (tracking, auto-capture, coaching, undo) | Native tracker + D3D | No source | **Re-implement** (Section 5). Behaviour-level parity is the acceptance test. |
 | Stitch + cubemap tiles | Native stitcher + tiler | No source | **Re-implement** with OpenCV `stitching` + own cube projection/tiler. |
 | Interactive viewer | Managed Scene3D software renderer | Decompilable | **Port** the maths, render with OpenGL ES (simpler + faster than software projection on Android). Same gestures. |
-| Library, properties, thumbnail picker, crop, settings, help, EULA, toasts, upload queue UI | Managed | Decompilable | **Port 1:1.** |
+| Library, properties, thumbnail picker, crop, settings, help, EULA, toasts | Managed | Decompilable | **Port 1:1.** |
 | Camera roll (still image, and `.pano` "interactive" copy) | XNA `MediaLibrary` | Replaced by MediaStore | **Preserve**: JPEG with XMP GPano metadata (so Google Photos/Gallery show it as a 360 photo) + optional `.pano` file to `Documents/`. |
-| E-mail share | Upload to photosynth.net then e-mail a link | Backend gone | **Preserve intent**: share sheet with the flattened JPEG (and `.pano`) attached; link mode only if a publisher is configured. |
-| Facebook / Twitter | Embedded WebView OAuth + SDKs | Both forbid WebView login; APIs changed | **Replace** with Android share sheet (`ACTION_SEND` image/*) — the user picks Facebook/X. Keep the "message + cropped image" composer UI. Native-SDK login is out of scope unless you own app registrations. |
-| photosynth.net upload, remote library, "on photosynth.net (n)" section, create account, sign-in with Microsoft account | REST/SOAP + Live Connect | Service shut down 2017 | **Keep behind `PanoramaPublisher` interface.** Ship a "no cloud" default that hides the remote section (existing view-model already supports empty remote lists), plus a reference implementation that talks to a self-hosted endpoint using the *same* manifest/JSON/zip layout so the protocol is preserved. Microsoft-account sign-in → MSAL only if a backend exists. |
-| Bing Maps publish, place search (gazetteer), static map tile | Bing v1 SOAP + mobile gazetteer | Retired | **Replace**: place search via Android Geocoder / Places API abstraction; static map via Maps Static or OSM tile; "publish to Bing Maps" removed from the picker (it was a photosynth.net-side flag). UI for place selection preserved. |
-| Best of Bing "featured" hub | XML feed on Azure blob | Gone | Keep the hub page and view-model; back it with a bundled/self-hosted feed URL (`BestOfBingUrl` in config) or hide when empty. |
+| E-mail share | Upload to photosynth.net then e-mail a link | Backend gone | **Preserve intent**: share sheet (`ACTION_SEND`) with the flattened JPEG attached, `.pano` as a second attachment, subject/body from `DefaultShareSubject*` / `DefaultShareMessage*`. The user picks their mail app. |
+| Facebook / Twitter | Embedded WebView OAuth + SDKs | Both forbid WebView login; APIs changed | **Removed** (decision). No SDKs, no accounts. The share sheet's "image to app…" row covers posting to any social app. The Facebook/Twitter `SharePage` variants, `ShareHelper`, `UploaderFacebookPhoto`/`UploaderTwitterPhoto`, Hammock and the Facebook SDK are not ported. |
+| photosynth.net upload, remote library, "on photosynth.net (n)" section, create account, sign-in with Microsoft account, upload queue | REST/SOAP + Live Connect | Service shut down 2017 | **Removed** (decision: stay local). Library shows only "on device (n)". `UploadQueue`, `UploadQueuePage`, the hub upload badge, `UploaderPhotosynth`, `PhotosynthPrepare`, `WebMethods`, Live Connect login and the create-account dialog are not ported. The on-disk format is still kept WP8-compatible (Section 6) because it costs nothing and keeps `.pano` files portable. |
+| Bing Maps publish, place search (gazetteer), static map tile | Bing v1 SOAP + mobile gazetteer | Retired | **Publish removed.** Place search kept as a *local* feature of Properties via Android `Geocoder` (reverse geocode the capture location, "NEARBY" list from `getFromLocation`, free-text `getFromLocationName`); "None" option kept. Static map tile dropped (it only appeared on the Bing Maps share page). |
+| Best of Bing "featured" hub | XML feed on Azure blob | Gone | **Removed** (decision). Hub has two sections: capture, library. `BestOfBingControl`/`BestOfBingViewModel` not ported. |
 | Lens integration (launch from camera app) | WP8 `Camera_Capture_App` extension | No Android equivalent | Provide `android.media.action.IMAGE_CAPTURE`-style intent filter + app shortcut "Capture panorama"; **not** a camera-app plug-in. |
-| `photosynth://` deep link | Protocol handler | — | Keep as App Link; resolves to viewer if a publisher is configured. |
+| `photosynth://` deep link | Protocol handler | — | Dropped; it only resolved remote collection ids. Instead register `.pano` (`application/zip` + extension) and GPano JPEG `ACTION_VIEW` intent filters so the app opens panoramas from files and other apps. |
 | Rate & review | Marketplace task | — | Play In-App Review. |
-| Update prompts (forced/optional) | Dynamic config XML | Config host gone | Keep the mechanism (remote JSON), point it at your host or disable. |
-| Analytics (Cosmos, mafdi crash reporter) | Custom | Gone | Replace with opt-in Firebase/Sentry or drop. |
+| Update prompts (forced/optional), dynamic device config | Dynamic config XML | Config host gone | Dropped; Play handles updates. Device camera config (`FocalSD`, `GyroStrength`) becomes a bundled per-device table with a sensible default. |
+| Analytics (Cosmos, mafdi crash reporter) | Custom | Gone | Dropped; the app makes no network calls. |
 
 ---
 
@@ -156,9 +161,9 @@ Navigation entry: `UserInterface/MainPage.xaml?appStart=0`. Lens entry: `MainLen
 | Sensors | `SensorManager` `TYPE_ROTATION_VECTOR`/`TYPE_GAME_ROTATION_VECTOR`, `TYPE_GRAVITY`, `TYPE_MAGNETIC_FIELD` accuracy for compass calibration | Replaces `Microsoft.Devices.Sensors.Motion` in `InertialProcessingUnit`; calibration state → `SENSOR_STATUS_ACCURACY_*`. |
 | Engine | C++17 NDK library `libpsengine.so` (OpenCV 4.x minimal build: core, imgproc, features2d, calib3d, stitching, video; libjpeg-turbo; glm), JNI bridge in `engine/` Gradle module | Replaces the three native WinRT components. Same public surface as the `.winmd` APIs so the ported Kotlin code keeps its shape. |
 | Rendering | OpenGL ES 3.0 via `GLSurfaceView`/`SurfaceView` + EGL in the engine (capture world view and viewer); ported shaders in GLSL | Replaces `DrawingSurface` + D3D11 (`PanoCapD`, `PC-bkg`) and the software `Viewport3D`. |
-| Persistence | Files under `filesDir/Panoramas/<id>/` with the **same folder layout and XML/JSON manifests** as WP8 isolated storage; Room only for the library index/upload queue (or keep `PanoramaManager.xml` serialisation — see 6.1); `DataStore` for `AppSettings` | Keeps the data contract, makes `.pano` and capture-set files interchangeable with the original app's output. |
-| Background work | `WorkManager` foreground worker for stitch + upload queue (progress notification mirrors the WP8 upload toast/badge) | WP8 stitched in-process; Android must survive process death. |
-| Sharing | `ShareCompat` / `ACTION_SEND` with `FileProvider`; MediaStore for camera roll; `PanoramaPublisher` interface for link-based targets | See Section 2. |
+| Persistence | Files under `filesDir/Panoramas/<id>/` with the **same folder layout and XML/JSON manifests** as WP8 isolated storage; `PanoramaManager.xml` kept as the library index (no database needed at this scale); `DataStore` for `AppSettings` | Keeps the data contract, makes `.pano` and capture-set files interchangeable with the original app's output. |
+| Background work | `WorkManager` foreground worker for stitching (progress notification) | WP8 stitched in-process; Android must survive process death. |
+| Sharing | `ShareCompat` / `ACTION_SEND` with `FileProvider`; MediaStore for camera roll | See Section 2. No `INTERNET` permission in the manifest. |
 | Audio | `SoundPool` with the two clips transcoded from XNB (`Shutter-22m`, `tonequietshort-22m` → 22 kHz mono WAV/OGG) | Same sounds. |
 | Strings | `res/values/strings.xml` generated from `Photosynth.Resources.Strings.resources` (293 keys, keep key names) | Verbatim copy, lowercase Metro capitalisation preserved. |
 | Build | Gradle KTS, CMake for the engine, ABI arm64-v8a (+ x86_64 for emulator), R8 | |
@@ -168,14 +173,14 @@ Navigation entry: `UserInterface/MainPage.xaml?appStart=0`. Lens entry: `MainLen
 ```
 photosynth-android/
   app/            Compose UI, navigation, view-models (ported from Photosynth.dll)
-  core/           PanoramaItem, PanoramaManager, CaptureSession, UploadQueue, AppSettings,
-                  DotPano writer, cubemap.json, capture-set XML (ported from Photosynth.dll,
-                  PhotosynthWeb.dll, Settings.dll) – pure Kotlin, unit-tested
+  core/           PanoramaItem, PanoramaManager, CaptureSession, AppSettings, DotPano writer,
+                  cubemap.json, capture-set XML, GPano XMP writer (ported from Photosynth.dll,
+                  PhotosynthWeb.Utility/Prepare, Settings.dll) – pure Kotlin, unit-tested
   engine/         Kotlin API + JNI + C++ (tracker, stitcher, tiler, GL renderers)
   viewer/         Ported IOM + Scene3D maths (camera controllers, cube geometry, tile LOD)
                   on top of engine's GL renderer
-  publish/        PanoramaPublisher interface, NoCloudPublisher, PhotosynthCompatPublisher,
-                  place search + static map abstractions
+  share/          Share sheet targets (camera roll, email, image to app, .pano to app),
+                  FileProvider, Geocoder-backed place search
   metro-ui/       Theme, PanoramaHub, Pivot, AppBar, SettingsItem, Toast, CustomMessageBox,
                   Turnstile transition, tilt effect, PerformanceProgressBar
 ```
@@ -186,7 +191,7 @@ photosynth-android/
    just a zip). Commit the C# under `reference/decompiled/` (not shipped) so every port PR can
    cite the original method.
 2. Port bottom-up: `Settings` → `PhotosynthWeb.Utility`/`Prepare` → `Photosynth.UserInterface`
-   models (`PanoramaItem`, `PanoramaManager`, `UploadQueue`, `DotPano`) → view-models →
+   models (`PanoramaItem`, `PanoramaManager`, `DotPano`) → view-models →
    pages. View-models map almost mechanically: `INotifyPropertyChanged` → `StateFlow`,
    converters → small Kotlin functions, Expression Blend triggers → Compose state.
 3. Keep names. `ShareViewModel.ShowLocationMissingOverlay` stays
@@ -230,17 +235,17 @@ photosynth-android/
 
 | WP8 | Android destination | Deliberate changes (only these) |
 |---|---|---|
-| MainPage Panorama hub (capture / library / featured) | `HubScreen`: custom `PanoramaHub` (HorizontalPager with parallax oversized title "photosynth", wrap-around, section headers) | Camera preview inside the capture section uses CameraX `PreviewView`; requires runtime CAMERA permission prompt before the hub shows the preview (WP8 granted at install). "featured" hidden when no feed URL is configured. |
+| MainPage Panorama hub (capture / library / featured) | `HubScreen`: custom `PanoramaHub` (HorizontalPager with parallax oversized title "photosynth", wrap-around, section headers) with **two** sections: capture, library | Camera preview inside the capture section uses CameraX `PreviewView`; requires runtime CAMERA permission prompt before the hub shows the preview (WP8 granted at install). "featured" section removed (decision); the upload badge in the library header removed (no uploads). Menu: help, settings, rate & review ("refresh library" no longer needed without a remote list). |
 | MainLensPage | Not a separate screen; shortcut/intent launches `CaptureScreen(immediate=true)` | — |
 | CapturePage | `CaptureScreen`: full-bleed `GLSurfaceView` from the engine; coaching panel composable with the same four states, colours (green/yellow/red/calibration dots), copy and slide animation; bottom app bar undo / done / help; system back → "Delete panorama?" | Hardware shutter → volume key optional. Orientation handling via `configChanges` so the GL surface isn't torn down. |
-| StitchingPage | `StitchingScreen` (same layout, tip carousel with the 19 tips, determinate progress, delete/skip/properties) | Stitching runs in a foreground `WorkManager` job; "skip" returns to the hub and progress continues in the library tile overlay (as WP8 did in-process). |
-| ViewerPage | `ViewerScreen`: GL spherical viewer; tap toggles title/author banner; double-tap zoom; app bar share / properties / toggle highlights | Highlights only exist for remote synths; keep the menu item, disabled when none. |
-| LibraryControl | `LibrarySection` inside the hub: grid of 192×97 → ~150×75 dp tiles with 1 dp `#444` border, group headers, "stitch" overlay, long-press → delete sheet styled as the WP8 `ContextSelectModalDialog` | Remote group only when a publisher is configured. |
-| UploadQueuePage | `UploadQueueScreen` | Identical. Also surfaced as a notification. |
-| PropertiesPage, ThumbnailPickerPage, ImageCropPage, LocationSearchPage | Same four screens, same layout | Location search backed by `Geocoder`/Places abstraction. |
-| SharePickerPage / SharePage | `SharePickerScreen`, `ShareScreen(type)` | Picker rows: **camera roll, email, image to app…, interactive panorama (.pano) to app…, photosynth-compatible service** (only when configured). Facebook/Twitter/Bing Maps rows removed *from the default list* but the `ShareType` enum and their `SharePage` variants are kept so they can be re-enabled if SDK-based sharing is added. |
-| SettingsPage + sharing-license page | `SettingsScreen` (Pivot general/accounts) | "accounts" pivot shows only the publisher account row unless SDK logins are added; "gyroscope" row shown only when a gyro exists (same rule as WP8). |
-| HelpControl (Pivot) | `HelpScreen` full-screen dialog | Attribution text updated for the new third-party set (OpenCV, libjpeg-turbo, Selawik…). |
+| StitchingPage | `StitchingScreen` (same layout, tip carousel, determinate progress, delete/skip/properties) | Stitching runs in a foreground `WorkManager` job; "skip" returns to the hub and progress continues in the library tile overlay (as WP8 did in-process). Of the 19 tips, the 7 that advertise photosynth.net, Bing Maps, Facebook/Twitter or the Marketplace are dropped; the capture tips, camera-roll and thumbnail tips stay. |
+| ViewerPage | `ViewerScreen`: GL spherical viewer; tap toggles title/author banner; double-tap zoom; app bar share / properties | "toggle highlights" removed: highlights only ever existed on remote synths. |
+| LibraryControl | `LibrarySection` inside the hub: grid of 192×97 → ~150×75 dp tiles with 1 dp `#444` border, "on device (n)" header, "stitch" overlay, long-press → delete sheet styled as the WP8 `ContextSelectModalDialog` | Single group; the "on photosynth.net" group, sign-in link and `LibraryNoRemotePanos` copy are gone. |
+| UploadQueuePage / UploadQueueItem / UploadStatusControl | — | Not ported (no uploads). |
+| PropertiesPage, ThumbnailPickerPage, ImageCropPage, LocationSearchPage | Same four screens, same layout | Location search backed by Android `Geocoder` (offline-capable on most devices); "NEARBY" results come from reverse-geocoding the capture location. |
+| SharePickerPage / SharePage | `SharePickerScreen`, `ShareScreen(type)` | Picker rows: **camera roll, email, image to app…, interactive panorama (.pano) to app…**. `ShareScreen` keeps the WP8 layout for the surviving types: verb + title header ("SAVE TO / camera roll", "SEND IN / email"), image vs interactive-panorama radio, message box (becomes the share-sheet body text), cropped-image preview (tap → crop). Sign-in, "make public", map-tile and "LOCATION MISSING" elements are gone with their targets. |
+| SettingsPage + sharing-license page | `SettingsScreen` (Pivot with the single "general" header) | "accounts" pivot removed (no accounts). "sharing license" row kept: it still writes the Creative Commons choice into the exported JPEG/`.pano` metadata (`licenceLink`). "gyroscope" row shown only when a gyro exists (same rule as WP8). |
+| HelpControl (Pivot) | `HelpScreen` full-screen dialog | "share" pivot rewritten for the four local targets; attribution text updated for the new third-party set (OpenCV, libjpeg-turbo, Selawik…). |
 | EulaPage | `EulaScreen` shown once (`AppEulaAcceptedSetting`) | Replace Microsoft Service Agreement links with your own terms/privacy URLs (config). |
 | Toasts, CustomMessageBox, modal dialogs | `metro-ui` composables | — |
 
@@ -327,7 +332,7 @@ libjpeg-turbo; can be Kotlin if speed is acceptable, but C++ keeps it next to th
 
 Port the *math* (cube geometry, perspective camera, LOD selection from `TilePyramid`,
 camera controllers: spring, zoom, rotate, slideshow) and render with GL: six face meshes, tiles
-uploaded as textures on demand from `deepzoom/` (local) or a publisher URL (remote),
+uploaded as textures on demand from `deepzoom/` (local, or from an opened `.pano`),
 touch → `CameraRotateCameraController`, pinch → `ZoomCameraController`, double-tap →
 `PanoramaZoomCameraController`. Reuse the cubemap.json reader from `IOM` (`CubeMap`,
 `CubeMapFace`).
@@ -354,8 +359,8 @@ PanoramaManager.xml              item index (id, title, capture time, lat/long, 
 
 Keep the XML/JSON schemas byte-compatible (serialise with the same element names — ILSpy
 gives the `DataContract` attributes). Benefit: a `.pano` produced by the WP8 app opens in the
-Android viewer and vice-versa, and the upload manifest stays valid for a photosynth-compatible
-backend.
+Android viewer and vice-versa. The `misc/ToBeUploaded_*.jpg` files and `PanoramaManager.xml`'s
+remote-id / ypid / collection-url fields are written empty and never read.
 
 ### 6.2 Exported formats
 
@@ -370,32 +375,57 @@ backend.
 
 | Milestone | Scope | Exit criteria |
 |---|---|---|
-| **M0 — Recovery** (1–2 wks) | ILSpy decompile all managed DLLs; extract XAML, strings, assets, XNB audio; write the interface specs for the three native components from the `.winmd` metadata and the callers; record 10 reference capture sessions on Android (video + sensors) for tracker validation. | `reference/` folder in repo; `engine` API header agreed. |
+| **M0 — Recovery + repo bootstrap** (1–2 wks) | Create `photosynth-android` (Section 8); ILSpy decompile all managed DLLs; extract XAML, strings, assets, XNB audio; write the interface specs for the three native components from the `.winmd` metadata and the callers; record 10 reference capture sessions on Android (video + sensors) for tracker validation. | Repo skeleton builds an empty app; `reference/` folder committed; `engine` API header agreed. |
 | **M1 — Shell + Library** (3–4 wks) | `metro-ui` kit, hub, settings, help, EULA, library (reading WP8-format folders), properties/thumbnail/crop pages, viewer over existing `.pano`/deepzoom data (GL viewer). Ported `core` with unit tests against golden XML/JSON. | Can open a `.pano` from the original app and browse the library; UI screenshots side-by-side with WP8 emulator match. |
 | **M2 — Capture + Stitch** (6–10 wks, engine-heavy) | Tracker (5.1) + world renderer, coaching states, undo/done, capture-set writer; stitcher (5.2) + tiler (5.3) as a WorkManager job; StitchingScreen; camera-roll export with GPano; `.pano` writer. | End-to-end: capture → stitch → view → save, on 3 reference devices; stitch time/quality benchmarks; golden replay tests pass. |
-| **M3 — Sharing + Publish** (2–3 wks) | Share picker/pages, share-sheet targets, upload queue UI + worker, `PanoramaPublisher` with NoCloud + photosynth-compatible reference impl, place search + static map abstraction, deep link, in-app review, update-check config. | Upload queue survives process death; publisher contract tested against a mock server that speaks the recovered REST shapes. |
+| **M3 — Sharing** (1–2 wks) | Share picker/pages, the four share-sheet targets with `FileProvider`, `.pano`/GPano `ACTION_VIEW` intent filters, Geocoder place search in Properties, in-app review. | Each target verified on stock Gmail/Photos/Files; a shared `.pano` re-opens in the app; no `INTERNET` permission in the merged manifest. |
 | **M4 — Polish + release** (2 wks) | Accessibility (TalkBack labels mirroring WP8 automation peers), tablets/foldables (hub scales), Play assets from the packaged icon/splash, attribution page, crash/analytics opt-in. | Play internal track build. |
 
 Risks, in order: (1) tracker feel — auto-capture must fire as reliably as the original or the
 product is different; budget replay-driven tuning time. (2) Stitch quality on wide-FOV modern
 lenses (OpenCV handles it, but seam/ghosting tuning is empirical). (3) Memory on 48 MP+ sensors —
 cap capture resolution (the WP8 "capture resolution" setting exists for exactly this).
-(4) Any cloud feature you decide must be "live" pulls in account/backend work not scoped here.
+(4) Google Play's photo/video-permission policy: use the Photo Picker / MediaStore write APIs
+only, never `READ_MEDIA_IMAGES`, so the local-only app stays policy-clean.
 
 ---
 
-## 8. Decisions needed from you
+## 8. Decisions taken, and the new repository
 
-1. **Cloud posture.** Default plan ships *no* live backend (photosynth.net is gone) and keeps the
-   protocol behind an interface. Do you want a self-hosted photosynth-compatible service built
-   as part of this, or is local + share-sheet enough?
-2. **Social.** Share-sheet only (default), or native Facebook/X SDK integration with your own
-   app registrations to keep the in-app "SHARE TO facebook/twitter" composer live?
-3. **Featured hub.** Keep "featured" with a feed you host, or drop the third hub section?
-4. **Minimum device bar.** minSdk 26 and gyro-optional (manual capture fallback, as WP8) — OK?
-5. **Repository.** This plan is being committed to the `tictactoe` repo's branch as requested;
-   the actual Android project should probably be its own repository (`photosynth-android`)
-   rather than living next to Español Coach.
+| Question | Decision | Effect on the plan |
+|---|---|---|
+| Cloud posture | **Stay local.** No backend, no remote library, no upload queue. | Sections 2, 3, 4, 7 scoped accordingly; no `INTERNET` permission; no publisher module. |
+| Social | **No Facebook, no SDK sharing.** | Share sheet only; Facebook/Twitter code, Hammock and the Facebook SDK are not ported. |
+| Featured hub | **Dropped.** | Two-section hub (capture, library). |
+| Repository | **Own repository.** | `photosynth-android`, bootstrapped in M0 as below. This plan stays in `tictactoe/docs/` as the record of the analysis; a copy goes into the new repo as `docs/PLAN.md`. |
+| Device bar (default accepted) | minSdk 26, gyroscope optional with manual capture fallback. | As Section 3. |
+
+### 8.1 Bootstrapping `photosynth-android`
+
+```
+photosynth-android/
+  README.md                 what it is, build steps, device requirements
+  docs/PLAN.md              this document
+  reference/                NOT shipped; decompiled C#, extracted XAML + strings, WP8 screenshots
+    decompiled/             ILSpy output per assembly
+    xaml/                   the 43 pages/controls
+    strings/Strings.resx    293 keys
+    assets/                 original PNG/JPG/XNB, cubemap JSON templates, device config XML
+    sessions/               recorded capture sessions (video + sensor CSV) for tracker replay
+  app/ core/ engine/ viewer/ share/ metro-ui/        (Section 3.2)
+  gradle/libs.versions.toml, settings.gradle.kts, build.gradle.kts
+  engine/src/main/cpp/CMakeLists.txt                 OpenCV + libjpeg-turbo via prefab/FetchContent
+  .github/workflows/android.yml                      assembleDebug + unit tests + lint on PR
+```
+
+- Licence: the original binaries are Microsoft's; nothing from `reference/` is redistributed.
+  The new code base is a clean-room re-implementation informed by the decompilation; pick a
+  licence for it (MIT/Apache-2.0) and keep the attribution page honest about OpenCV
+  (Apache-2.0), libjpeg-turbo (BSD/IJG), Selawik (OFL).
+- Package id `com.<you>.photosynth` (not `com.microsoft.*`), app name "Photosynth" only if you
+  are comfortable with the trademark; otherwise choose a name in M0 and keep the hub title
+  string as the one place it appears.
+- The `android/` Capacitor shell in the `tictactoe` repo is unrelated and stays untouched.
 
 ---
 
@@ -408,7 +438,7 @@ files were extracted from `Photosynth.dll`'s `Photosynth.g.resources` /
 in M0 with ILSpy and commit under `reference/` — they are the specification for "minimal UI
 change".
 
-## Appendix B — endpoints referenced by the binary (for the publisher contract)
+## Appendix B — endpoints referenced by the binary (historical; none are used by the Android app)
 
 `photosynth.net` REST/SOAP (`WebMethods`: CreateUser, GetUserNameAvailability, CreatePanorama,
 AddPanoramaPhoto, PutData/PutPCDData, CommitPanorama, GetPanoStatus, GetPanoMetadata,
